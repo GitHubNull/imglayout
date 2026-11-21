@@ -1,0 +1,16 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+src/backend/target/
+src/backend/gen/
+
+# 临时产物
+tmp/*
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+*.log
+.DS_Store
