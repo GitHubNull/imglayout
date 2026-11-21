@@ -60,16 +60,22 @@ async function openProject() {
 let unlistenProgress: (() => void) | null = null
 
 async function startExport() {
+  exportDialog.value = true
+  exporting.value = false
+  exportError.value = ''
+  exportDone.value = 0
+  exportTotal.value = project.doc.items.length
+  lastExportPath.value = ''
+}
+
+async function confirmExport() {
   const path = await save({
     defaultPath: `imglayout-${project.doc.canvas.widthMm}x${project.doc.canvas.heightMm}.${exportFormat.value === 'jpeg' ? 'jpg' : 'png'}`,
     filters: [{ name: '图片', extensions: exportFormat.value === 'jpeg' ? ['jpg'] : ['png'] }],
   })
   if (!path) return
-  exportDialog.value = true
   exporting.value = true
   exportError.value = ''
-  exportDone.value = 0
-  exportTotal.value = project.doc.items.length
   unlistenProgress = await listen<{ done: number; total: number }>('export-progress', (e) => {
     exportDone.value = e.payload.done
     exportTotal.value = e.payload.total
@@ -166,12 +172,40 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeyDown))
         </template>
         <template v-else-if="exportError">
           <p class="error">导出失败：{{ exportError }}</p>
+          <div class="row">
+            <Button label="重试" @click="confirmExport" />
+            <Button label="关闭" text @click="exportDialog = false" />
+          </div>
         </template>
-        <template v-else>
+        <template v-else-if="lastExportPath">
           <p>导出完成：{{ lastExportPath }}</p>
           <div class="row">
             <Button label="打开所在文件夹" icon="pi pi-folder" @click="openExportFolder" />
             <Button label="关闭" text @click="exportDialog = false" />
+          </div>
+        </template>
+        <template v-else>
+          <label class="field">
+            <span>格式</span>
+            <SelectButton
+              v-model="exportFormat"
+              :options="[{ label: 'JPEG', value: 'jpeg' }, { label: 'PNG', value: 'png' }]"
+              option-label="label"
+              option-value="value"
+              class="w-full"
+            />
+          </label>
+          <label v-if="exportFormat === 'jpeg'" class="field">
+            <span>质量：{{ exportQuality }}</span>
+            <Slider v-model="exportQuality" :min="60" :max="100" class="w-full" />
+          </label>
+          <p class="px-hint">
+            输出：{{ project.doc.canvas.widthMm }}×{{ project.doc.canvas.heightMm }}mm @
+            {{ project.doc.canvas.dpi }}DPI，共 {{ project.doc.items.length }} 张照片
+          </p>
+          <div class="row">
+            <Button label="开始导出" icon="pi pi-download" @click="confirmExport" />
+            <Button label="取消" text @click="exportDialog = false" />
           </div>
         </template>
       </div>
@@ -227,11 +261,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeyDown))
   flex-direction: column;
   gap: 12px;
 }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--p-text-muted-color);
+}
+.px-hint {
+  font-size: 12px;
+  color: var(--p-text-muted-color);
+}
 .error {
   color: var(--p-red-500);
 }
 .row {
   display: flex;
   gap: 8px;
+}
+.w-full {
+  width: 100%;
 }
 </style>
