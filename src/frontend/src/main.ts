@@ -15,8 +15,5 @@ app.use(PrimeVue, {
       darkModeSelector: '.app-dark',
     },
   },
-  locale: {
-    locale: 'zh-CN',
-  },
 })
 app.mount('#app')

@@ -51,7 +51,12 @@ fn main() {
         items.push(PhotoItem {
             id: format!("item-{i}"),
             asset_id,
-            rect: RectMm { x_mm: 0.0, y_mm: 0.0, w_mm: 0.0, h_mm: 0.0 },
+            rect: RectMm {
+                x_mm: 0.0,
+                y_mm: 0.0,
+                w_mm: 0.0,
+                h_mm: 0.0,
+            },
             rotation: 0.0,
             flip_h: false,
             flip_v: false,
@@ -72,7 +77,13 @@ fn main() {
             bleed_mm: 0.0,
         },
         mode: LayoutMode::Grid,
-        grid: Some(GridConfig { rows: 3, cols: 2, gap_mm: 6.0, outer_mm: 12.0, fill: FillMode::Cover }),
+        grid: Some(GridConfig {
+            rows: 3,
+            cols: 2,
+            gap_mm: 6.0,
+            outer_mm: 12.0,
+            fill: FillMode::Cover,
+        }),
         masonry: None,
         items,
     };
@@ -82,7 +93,10 @@ fn main() {
         &doc,
         &assets,
         out,
-        &ExportOptions { format: ExportFormat::Png, quality: 95 },
+        &ExportOptions {
+            format: ExportFormat::Png,
+            quality: 95,
+        },
         &|done, total| println!("progress {done}/{total}"),
     )
     .unwrap();

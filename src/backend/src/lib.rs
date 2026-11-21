@@ -1,3 +1,4 @@
+pub mod commands;
 pub mod layout;
 pub mod model;
 pub mod presets;
@@ -8,7 +9,14 @@ pub mod units;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![])
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            commands::assets::import_assets,
+            commands::export::export_layout_cmd,
+            commands::presets::list_presets,
+            commands::project::save_project,
+            commands::project::load_project,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
