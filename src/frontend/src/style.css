@@ -14,3 +14,13 @@ body,
   margin: 0;
   padding: 0;
 }
+
+/* 侧栏等窄容器里 InputNumber 的 input 默认 min-content 过宽，
+   会把 grid/flex 轨道撑破容器，必须允许收缩到 0 */
+.p-inputnumber {
+  width: 100%;
+}
+.p-inputnumber .p-inputnumber-input {
+  width: 100%;
+  min-width: 0;
+}

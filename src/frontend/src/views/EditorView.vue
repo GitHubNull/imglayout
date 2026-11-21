@@ -255,6 +255,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeyDown))
   border-left: 1px solid var(--p-content-border-color);
   background: var(--p-content-background);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 .export-body {
   display: flex;

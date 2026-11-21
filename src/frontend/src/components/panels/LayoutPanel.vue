@@ -29,7 +29,7 @@ const masonry = computed(() => project.doc.masonry)
   <div class="panel-body">
     <label class="field">
       <span>布局模式</span>
-      <SelectButton v-model="mode" :options="modeOptions" option-label="label" option-value="value" class="w-full" />
+      <SelectButton v-model="mode" :options="modeOptions" option-label="label" option-value="value" class="w-full seg-vertical" />
     </label>
 
     <template v-if="mode === 'grid' && grid">
@@ -111,5 +111,23 @@ const masonry = computed(() => project.doc.masonry)
 }
 .w-full {
   width: 100%;
+}
+/* 三选项在 300px 侧栏内横向排不下，改纵向分段控件。
+   SelectButton 根节点同时带 p-selectbutton 与 seg-vertical，只能以自身为容器 */
+.seg-vertical {
+  flex-direction: column;
+  align-items: stretch;
+}
+.seg-vertical :deep(.p-togglebutton) {
+  border-radius: 0;
+  border-width: 0 1px 1px 1px;
+  justify-content: center;
+}
+.seg-vertical :deep(.p-togglebutton:first-child) {
+  border-radius: 6px 6px 0 0;
+  border-width: 1px;
+}
+.seg-vertical :deep(.p-togglebutton:last-child) {
+  border-radius: 0 0 6px 6px;
 }
 </style>
