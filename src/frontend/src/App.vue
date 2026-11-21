@@ -5,3 +5,4 @@ import EditorView from './views/EditorView.vue'
 <template>
   <EditorView />
 </template>
+

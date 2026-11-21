@@ -9,7 +9,11 @@ const presets = ref<Preset[]>([])
 const selectedPresetId = ref<string>('')
 
 onMounted(async () => {
-  presets.value = await invoke<Preset[]>('list_presets')
+  try {
+    presets.value = await invoke<Preset[]>('list_presets')
+  } catch {
+    // 浏览器直连开发时无 Tauri 运行时，忽略
+  }
 })
 
 const canvas = computed(() => project.doc.canvas)
