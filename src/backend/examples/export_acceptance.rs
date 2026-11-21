@@ -81,6 +81,7 @@ fn build_doc(preset_id: &str, tile_paths: &[String]) -> (LayoutDoc, HashMap<Stri
             adjust: Adjust::default(),
             style: Style::default(),
             crop: None,
+            ..PhotoItem::default()
         });
     }
     (

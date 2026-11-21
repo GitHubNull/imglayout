@@ -118,6 +118,9 @@ function onGlobalKeyDown(e: KeyboardEvent) {
   } else if (e.key === 's') {
     e.preventDefault()
     void saveProject()
+  } else if (e.key === 'j') {
+    e.preventDefault()
+    if (project.selectedId) project.duplicateItem(project.selectedId)
   }
 }
 

@@ -81,6 +81,7 @@ function drawItem(item: PhotoItem, rect: RectMm, index: number) {
   const fill = fillOf(project.doc)
 
   ctx!.save()
+  ctx!.globalAlpha = Math.min(1, Math.max(0, item.opacity))
   roundedRectPath(dx, dy, dw, dh, radiusPx)
   ctx!.clip()
 
@@ -132,6 +133,7 @@ function drawItem(item: PhotoItem, rect: RectMm, index: number) {
 
   if (borderPx > 0) {
     ctx!.save()
+    ctx!.globalAlpha = Math.min(1, Math.max(0, item.opacity))
     roundedRectPath(dx + borderPx / 2, dy + borderPx / 2, dw - borderPx, dh - borderPx, Math.max(0, radiusPx - borderPx / 2))
     ctx!.strokeStyle = item.style.borderColor
     ctx!.lineWidth = borderPx
@@ -228,7 +230,7 @@ function draw() {
   const rects = project.rects
   project.doc.items.forEach((item, i) => {
     const rect = rects[i]
-    if (rect) drawItem(item, rect, i)
+    if (item.visible && rect) drawItem(item, rect, i)
   })
 }
 

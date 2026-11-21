@@ -7,6 +7,7 @@ import Button from 'primevue/button'
 import ColorPicker from 'primevue/colorpicker'
 import Dialog from 'primevue/dialog'
 import InputNumber from 'primevue/inputnumber'
+import InputText from 'primevue/inputtext'
 import ProgressBar from 'primevue/progressbar'
 import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
@@ -35,6 +36,7 @@ app.component('Button', Button)
 app.component('ColorPicker', ColorPicker)
 app.component('Dialog', Dialog)
 app.component('InputNumber', InputNumber)
+app.component('InputText', InputText)
 app.component('ProgressBar', ProgressBar)
 app.component('Select', Select)
 app.component('SelectButton', SelectButton)

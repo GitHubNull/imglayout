@@ -46,6 +46,14 @@ export interface PhotoItem {
   adjust: Adjust
   style: Style
   crop: CropNorm | null
+  /** 隐藏层：不绘制、不导出、画布不可点选 */
+  visible: boolean
+  /** 0..1，整层与背景的混合比例 */
+  opacity: number
+  /** 锁定层：画布上禁止移动/缩放/旋转/微调，面板仍可操作 */
+  locked: boolean
+  /** 图层自定义名，null 回退文件名 */
+  name: string | null
 }
 
 export interface RectMm {
@@ -126,6 +134,10 @@ export function newItem(id: string, assetId: string): PhotoItem {
     adjust: { brightness: 1, contrast: 1, saturation: 1 },
     style: { radiusMm: 0, borderWidthMm: 0, borderColor: '#000000' },
     crop: null,
+    visible: true,
+    opacity: 1,
+    locked: false,
+    name: null,
   }
 }
 

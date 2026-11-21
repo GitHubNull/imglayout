@@ -85,6 +85,7 @@ mod tests {
             adjust: Default::default(),
             style: Style::default(),
             crop,
+            ..PhotoItem::default()
         }
     }
 

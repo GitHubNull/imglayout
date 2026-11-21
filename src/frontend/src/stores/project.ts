@@ -143,6 +143,28 @@ export const useProjectStore = defineStore('project', {
       const [moved] = this.doc.items.splice(idx, 1)
       this.doc.items.splice(to, 0, moved)
     },
+    moveItem(id: string, toIndex: number) {
+      const from = this.doc.items.findIndex((i) => i.id === id)
+      if (from < 0) return
+      const to = Math.max(0, Math.min(this.doc.items.length - 1, toIndex))
+      if (from === to) return
+      this.snapshot()
+      const [moved] = this.doc.items.splice(from, 1)
+      this.doc.items.splice(to, 0, moved)
+    },
+    duplicateItem(id: string) {
+      const idx = this.doc.items.findIndex((i) => i.id === id)
+      if (idx < 0) return
+      this.snapshot()
+      const copy: PhotoItem = JSON.parse(JSON.stringify(this.doc.items[idx]))
+      copy.id = crypto.randomUUID()
+      copy.name = copy.name ? `${copy.name} 副本` : null
+      if (this.doc.mode === 'free') {
+        copy.rect = { ...copy.rect, xMm: copy.rect.xMm + 8, yMm: copy.rect.yMm + 8 }
+      }
+      this.doc.items.splice(idx + 1, 0, copy)
+      this.selectedId = copy.id
+    },
     replaceDoc(doc: LayoutDoc) {
       this.doc = doc
       this.selectedId = null

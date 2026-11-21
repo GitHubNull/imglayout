@@ -37,9 +37,20 @@
   "flipV": false,
   "adjust": { "brightness": 1, "contrast": 1, "saturation": 1 },  // 0–2
   "style": { "radiusMm": 0, "borderWidthMm": 0, "borderColor": "#000000" },
-  "crop": null                        // {x,y,w,h} 0–1 归一化裁剪窗口；null=整图
+  "crop": null,                       // {x,y,w,h} 0–1 归一化裁剪窗口；null=整图
+  // —— 图层管理字段（均带默认值，旧项目文件缺省时自动补齐）——
+  "visible": true,                    // 隐藏层：预览不绘制、导出跳过、画布不可点选
+  "opacity": 1,                       // 0–1，整层（含边框）与背景混合的比例
+  "locked": false,                    // 锁定层：画布上禁止移动/缩放/旋转/微调/删除
+  "name": null                        // 图层自定义名；null 回退为文件名
 }
 ```
+
+图层字段语义（预览与导出口径一致）：
+
+- **visible**：隐藏层仍参与 grid/masonry 排版占位（与 PS 一致），只是不绘制、不导出。
+- **opacity**：导出时把该层合成结果的 alpha 通道按比例缩放后再 blend 到画布；预览用 canvas `globalAlpha` 近似。
+- **locked**：只约束画布交互（InteractionController），图层面板仍可重命名/删除/复制/调不透明度。
 
 ## AssetEntry（导入照片登记表，不入 LayoutDoc）
 

@@ -69,11 +69,16 @@ pub fn export_layout(
     let mut canvas = RgbaImage::from_pixel(out_w, out_h, Rgba([bg[0], bg[1], bg[2], 255]));
 
     let rects = compute_rects(doc, assets)?;
-    let total = doc.items.len();
+    let total = doc.items.iter().filter(|i| i.visible).count();
+    let mut done = 0usize;
 
-    for (idx, (item, rect)) in doc.items.iter().zip(rects.iter()).enumerate() {
+    for (item, rect) in doc.items.iter().zip(rects.iter()) {
+        if !item.visible {
+            continue;
+        }
+        done += 1;
         let Some(rect) = rect else {
-            progress(idx + 1, total);
+            progress(done, total);
             continue;
         };
         let asset = assets
@@ -82,7 +87,7 @@ pub fn export_layout(
         let prepared = prepare_photo(&asset.path, item)?;
 
         let fill = fill_for(doc);
-        let overlay = compose_photo(
+        let mut overlay = compose_photo(
             prepared,
             (
                 mm_to_px(rect.w_mm, doc.canvas.dpi).max(1),
@@ -94,12 +99,19 @@ pub fn export_layout(
             mm_to_px(item.style.border_width_mm, doc.canvas.dpi),
             parse_hex_color(&item.style.border_color).unwrap_or(Rgb([0, 0, 0])),
         );
+        // 整层（含边框）按不透明度与背景混合
+        let opacity = item.opacity.clamp(0.0, 1.0);
+        if opacity < 1.0 {
+            for px in overlay.pixels_mut() {
+                px[3] = (px[3] as f64 * opacity).round() as u8;
+            }
+        }
 
         let scale = doc.canvas.dpi as f64 / 25.4;
         let x = ((rect.x_mm + doc.canvas.bleed_mm) * scale).round() as i64;
         let y = ((rect.y_mm + doc.canvas.bleed_mm) * scale).round() as i64;
         imageops::overlay(&mut canvas, &overlay, x, y);
-        progress(idx + 1, total);
+        progress(done, total);
     }
 
     write_output(&canvas, out_path, opts)

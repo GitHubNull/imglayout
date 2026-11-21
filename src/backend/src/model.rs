@@ -87,9 +87,45 @@ pub struct PhotoItem {
     pub style: Style,
     #[serde(default)]
     pub crop: Option<CropNorm>,
+    /// 隐藏层：预览不绘制、导出跳过、画布不可点选。
+    #[serde(default = "default_true")]
+    pub visible: bool,
+    /// 0..1，整层（含边框）与背景混合的比例。
+    #[serde(default = "unit_value")]
+    pub opacity: f64,
+    /// 锁定层：画布上禁止移动/缩放/旋转/微调/删除，面板仍可操作。
+    #[serde(default)]
+    pub locked: bool,
+    /// 图层自定义名；None 回退为文件名。
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+impl Default for PhotoItem {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            asset_id: String::new(),
+            rect: RectMm::default(),
+            rotation: 0.0,
+            flip_h: false,
+            flip_v: false,
+            adjust: Adjust::default(),
+            style: Style::default(),
+            crop: None,
+            visible: true,
+            opacity: 1.0,
+            locked: false,
+            name: None,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RectMm {
     pub x_mm: f64,
@@ -212,5 +248,23 @@ mod tests {
         assert_eq!(item.adjust, Adjust::default());
         assert!(!item.flip_h);
         assert!(item.crop.is_none());
+        // 旧项目文件无图层管理字段：默认可见、不透明、未锁定、无名
+        assert!(item.visible);
+        assert_eq!(item.opacity, 1.0);
+        assert!(!item.locked);
+        assert_eq!(item.name, None);
+    }
+
+    #[test]
+    fn photo_item_layer_fields_roundtrip() {
+        let item: PhotoItem = serde_json::from_str(
+            r#"{"id":"a","assetId":"b","rect":{"xMm":0,"yMm":0,"wMm":10,"hMm":10},
+                "visible":false,"opacity":0.5,"locked":true,"name":"背景 1"}"#,
+        )
+        .unwrap();
+        assert!(!item.visible);
+        assert_eq!(item.opacity, 0.5);
+        assert!(item.locked);
+        assert_eq!(item.name.as_deref(), Some("背景 1"));
     }
 }

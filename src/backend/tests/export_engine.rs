@@ -38,6 +38,7 @@ fn item(id: &str, asset_id: &str) -> PhotoItem {
         adjust: Adjust::default(),
         style: Style::default(),
         crop: None,
+        ..PhotoItem::default()
     }
 }
 
@@ -409,4 +410,64 @@ fn free_mode_uses_item_rect_directly() {
     // 10mm=118px 起，20mm=236px 宽
     assert_eq!(*img.get_pixel(200, 200), Rgb([0, 0, 0]));
     assert_eq!(*img.get_pixel(50, 50), Rgb([255, 255, 255]));
+}
+
+#[test]
+fn hidden_item_is_skipped_in_export() {
+    let dir = tempfile::tempdir().unwrap();
+    let red = write_solid(&dir, "red.png", Rgb([255, 0, 0]), 60, 60);
+    let green = write_solid(&dir, "green.png", Rgb([0, 200, 0]), 60, 60);
+    let mut assets = HashMap::new();
+    register(&mut assets, "a-red", &red, 60, 60);
+    register(&mut assets, "a-green", &green, 60, 60);
+
+    let mut hidden = item("i-hidden", "a-green");
+    hidden.visible = false;
+    let doc = grid_doc(
+        vec![item("i-red", "a-red"), hidden],
+        GridConfig {
+            rows: 1,
+            cols: 2,
+            gap_mm: 0.0,
+            outer_mm: 0.0,
+            fill: FillMode::Cover,
+        },
+    );
+    let out = dir.path().join("out.png");
+    export(&doc, &assets, &out);
+
+    let img = image::open(&out).unwrap().to_rgb8();
+    // 左格红；隐藏层所在右格保持背景白
+    assert_eq!(*img.get_pixel(295, 295), Rgb([255, 0, 0]));
+    assert_eq!(*img.get_pixel(885, 295), Rgb([255, 255, 255]));
+}
+
+#[test]
+fn opacity_blends_layer_with_background() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = write_solid(&dir, "red.png", Rgb([255, 0, 0]), 60, 60);
+    let mut assets = HashMap::new();
+    register(&mut assets, "a", &path, 60, 60);
+
+    let mut half = item("i", "a");
+    half.opacity = 0.5;
+    let doc = grid_doc(
+        vec![half],
+        GridConfig {
+            rows: 1,
+            cols: 1,
+            gap_mm: 0.0,
+            outer_mm: 0.0,
+            fill: FillMode::Cover,
+        },
+    );
+    let out = dir.path().join("out.png");
+    export(&doc, &assets, &out);
+
+    let img = image::open(&out).unwrap().to_rgb8();
+    // 0.5×红 + 0.5×白 = (255, 127~128, 127~128)
+    let px = img.get_pixel(590, 590);
+    assert_eq!(px[0], 255);
+    assert!((127..=128).contains(&px[1]));
+    assert!((127..=128).contains(&px[2]));
 }

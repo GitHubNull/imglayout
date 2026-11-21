@@ -69,14 +69,15 @@ export class InteractionController {
   nudgeSelected(dxMm: number, dyMm: number) {
     const project = useProjectStore()
     const item = project.selectedItem
-    if (!item || project.doc.mode !== 'free') return
+    if (!item || item.locked || project.doc.mode !== 'free') return
     project.updateItemRect(item.id, { ...item.rect, xMm: item.rect.xMm + dxMm, yMm: item.rect.yMm + dyMm })
     this.deps.redraw()
   }
 
   deleteSelected() {
     const project = useProjectStore()
-    if (project.selectedId) project.removeItem(project.selectedId)
+    const item = project.selectedItem
+    if (item && !item.locked && project.selectedId) project.removeItem(project.selectedId)
   }
 
   private bleed(): number {
@@ -129,7 +130,7 @@ export class InteractionController {
     for (let i = project.doc.items.length - 1; i >= 0; i--) {
       const item = project.doc.items[i]
       const rect = rects[i]
-      if (!rect) continue
+      if (!rect || !item.visible) continue
       const cx = rect.xMm + rect.wMm / 2
       const cy = rect.yMm + rect.hMm / 2
       const rad = (-(item.rotation % 360) * Math.PI) / 180
@@ -160,7 +161,7 @@ export class InteractionController {
     if (e.button !== 0) return
 
     const hit = this.handleAt(pxX, pxY)
-    if (hit && project.doc.mode === 'free') {
+    if (hit && project.doc.mode === 'free' && !project.selectedItem?.locked) {
       const mm = this.toMm(e)
       if (this.isRotateHandle(pxX, pxY)) {
         const item = project.selectedItem!
@@ -190,6 +191,10 @@ export class InteractionController {
     project.select(itemId)
     if (itemId && project.doc.mode === 'free') {
       const item = project.doc.items.find((i) => i.id === itemId)!
+      if (item.locked) {
+        this.deps.redraw()
+        return
+      }
       this.state = {
         kind: 'move',
         itemId,

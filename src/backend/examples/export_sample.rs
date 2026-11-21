@@ -63,6 +63,7 @@ fn main() {
             adjust: Adjust::default(),
             style: Style::default(),
             crop: None,
+            ..PhotoItem::default()
         });
     }
 
