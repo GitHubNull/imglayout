@@ -16,8 +16,9 @@
   },
   "mode": "grid",          // grid | masonry | free
   "grid":    { "rows": 2, "cols": 3, "gapMm": 4, "outerMm": 8, "fill": "cover" },
-  "masonry": { "columns": 3, "gapMm": 4, "outerMm": 8, "fill": "cover" },
+  "masonry": { "columns": 3, "gapMm": 4, "outerMm": 8 },
   // grid/masonry 字段仅在对应 mode 下存在；free 模式无布局配置
+  // masonry 无 fill：框高由照片（裁剪后）宽高比决定，照片等比填满自己的框
   "items": [ /* PhotoItem[]，数组顺序 = free 模式层级（底→顶） */ ]
 }
 ```
@@ -55,7 +56,7 @@
 ## 算法语义
 
 - **grid**：内容区 = 画布减 2×outerMm；格宽 = (内容宽 − (cols−1)×gap)/cols，余数像素/亚毫米分配到末列（保证守恒 Σw + Σgap = 内容宽）。行高同理。照片按序从左到右、从上到下填充，多余照片丢弃位、不足留空格。
-- **masonry**：列宽同 grid 公式；每张照片高度 = 格宽 ÷ 照片宽高比（cover 时裁剪后再等比缩放，格高由内容决定）；逐列填充当前最短列。
+- **masonry**：列宽同 grid 公式；每张照片高度 = 列宽 ÷ 照片（crop 窗口折算后）宽高比，框高由内容决定；逐张放入当前最短列。照片恒等比填满自己的框，无 cover/contain 之分（与 grid 不同）。
 - **cover/contain**：cover = 等比放大填满格、超出居中裁剪；contain = 完整显示、格内剩余填背景色。
 - **free 吸附**：拖动/缩放时对其他对象边缘与画布中线/边界 ±0.5mm 内吸附；吸附优先于钳制。
 - **出血**：导出画布 = (宽+2×bleed) × (高+2×bleed)，背景铺满；照片不进入出血区（除非用户拖到边缘外，则照常合成，出血区仅延展背景与越界内容）。
