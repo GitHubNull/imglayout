@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import CanvasStage from '../components/canvas/CanvasStage.vue'
+import { useCanvasView } from '../composables/useCanvasView'
 import LayoutPanel from '../components/panels/LayoutPanel.vue'
 import LayerPanel from '../components/panels/LayerPanel.vue'
 import OutputPanel from '../components/panels/OutputPanel.vue'
@@ -14,6 +15,7 @@ import type { AssetEntry, LayoutDoc } from '../types/layout'
 
 const project = useProjectStore()
 const assets = useAssetsStore()
+const view = useCanvasView()
 
 const stageRef = ref<InstanceType<typeof CanvasStage> | null>(null)
 const exportDialog = ref(false)
@@ -136,16 +138,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeyDown))
       <div class="spacer" />
       <Button icon="pi pi-minus" text @click="stageRef?.zoomStep(1 / 1.25)" />
       <Button label="适应" text @click="stageRef?.fitView(); stageRef?.zoomStep(1)" />
-      <Button label="100%" text @click="stageRef?.zoom100()" />
+      <Button :label="`${view.zoomPercent.value}%`" text class="zoom-readout" title="点击恢复 100%" @click="stageRef?.zoom100()" />
       <Button icon="pi pi-plus" text @click="stageRef?.zoomStep(1.25)" />
       <span class="zoom">{{ project.doc.items.length }} 张 · {{ project.doc.canvas.widthMm }}×{{ project.doc.canvas.heightMm }}mm</span>
       <Button label="导出…" icon="pi pi-download" @click="startExport" />
     </header>
 
     <div class="main">
-      <div class="stage-wrap">
-        <CanvasStage ref="stageRef" />
-      </div>
       <aside class="side">
         <Tabs value="output">
           <TabList>
@@ -162,6 +161,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeyDown))
           </TabPanels>
         </Tabs>
       </aside>
+      <div class="stage-wrap">
+        <CanvasStage ref="stageRef" :view="view" />
+      </div>
     </div>
 
     <Dialog v-model:visible="exportDialog" header="导出" :closable="!exporting" :modal="true" :style="{ width: '420px' }">
@@ -252,10 +254,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeyDown))
 .side {
   width: 300px;
   flex-shrink: 0;
-  border-left: 1px solid var(--p-content-border-color);
+  border-right: 1px solid var(--p-content-border-color);
   background: var(--p-content-background);
   overflow-y: auto;
   overflow-x: hidden;
+}
+.zoom-readout {
+  min-width: 56px;
 }
 .export-body {
   display: flex;

@@ -10,9 +10,12 @@ import type { PhotoItem, RectMm } from '../../types/layout'
 const stageEl = ref<HTMLDivElement | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 
+const props = defineProps<{ view: ReturnType<typeof useCanvasView> }>()
+
 const project = useProjectStore()
 const assets = useAssetsStore()
-const view = useCanvasView()
+// view 由 EditorView 创建并共享，工具栏的缩放读数与画布联动
+const view = props.view
 
 let ctx: CanvasRenderingContext2D | null = null
 let controller: InteractionController | null = null

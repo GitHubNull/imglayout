@@ -23,7 +23,8 @@ function applyPreset(id: string) {
   const p = presets.value.find((x) => x.id === id)
   if (!p) return
   selectedPresetId.value = id
-  project.updateCanvas({ widthMm: p.widthMm, heightMm: p.heightMm })
+  // 预设默认按横向（宽 ≥ 高）应用，需要竖向时用「横竖互换」
+  project.updateCanvas({ widthMm: p.landscapeWidthMm, heightMm: p.landscapeHeightMm })
 }
 
 function swapOrientation() {

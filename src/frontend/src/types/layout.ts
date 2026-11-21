@@ -103,8 +103,8 @@ export function emptyDoc(): LayoutDoc {
   return {
     version: 1,
     canvas: {
-      widthMm: 210,
-      heightMm: 297,
+      widthMm: 297,
+      heightMm: 210,
       dpi: 300,
       background: '#FFFFFF',
       bleedMm: 0,
