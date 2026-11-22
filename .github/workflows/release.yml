@@ -2,7 +2,7 @@ name: Release
 
 # 语义化版本 tag 触发发布：v1.2.3 / v1.2.3-beta.1 / v1.2.3-test.2
 # 预发布（-beta/-test）自动标记为 GitHub Prerelease。
-# 注意：本 workflow 尚未经真实运行验证（Actions 额度受限），首次发布请先用 v*-test.1 验证。
+# 已经 v1.0.0-test.1 真实运行验证（validate + Linux/Windows 打包全绿）。
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
     outputs:
       prerelease: ${{ steps.semver.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 校验 tag 语义化版本（仅支持 beta/test 预发布）
         id: semver
@@ -62,15 +62,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: 安装依赖（根 workspace）
