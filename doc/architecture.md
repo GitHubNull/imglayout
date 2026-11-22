@@ -16,7 +16,7 @@
 doc/         本文档与规格（PRD / 架构 / 布局 schema / 打印尺寸）
 src/frontend Vue3+Vite 前端
 src/backend  Tauri 2 Rust crate
-script/      dev / build / check（零告警门禁）/ test / build-windows.bat（Windows 双击一键打包 NSIS）
+script/      dev / build / check（零告警门禁）/ test / build-windows.bat + .ps1（Windows 双击一键打包 NSIS，bat 为纯 ASCII 启动器）
 test/        fixtures（纯色/渐变样本图、布局样例 JSON）、e2e 断言
 tmp/         临时产物（gitignore）
 ```

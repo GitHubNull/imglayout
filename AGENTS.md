@@ -16,7 +16,7 @@ src/frontend/   Vue 3 + PrimeVue 4 + Pinia（全局注册组件，无 i18n，中
   src/lib/                    纯函数：layout 算法、画布主题、快捷键、教程数据
 src/backend/    Tauri v2 Rust：commands/（保存/导出/项目包）、render/、layout/
 doc/            用户/开发者/AI 代理三级教程 + 架构与格式文档
-script/         dev.sh build.sh check.sh test.sh + build-windows.bat（Windows 双击打包，根 package.json 只做转发）
+script/         dev.sh build.sh check.sh test.sh + build-windows.bat/ps1（Windows 双击打包，bat 是纯 ASCII 启动器、逻辑在 ps1，根 package.json 只做转发）
 ```
 
 ## 命令
