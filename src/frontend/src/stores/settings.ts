@@ -12,6 +12,8 @@ export interface SettingsState {
   rulerVisible: boolean
   guidesVisible: boolean
   layerIndexVisible: boolean
+  /** 顶栏分组下拉展开态（按组记忆，缺省即收起） */
+  toolbarExpanded: Record<string, boolean>
 }
 
 const DEFAULTS: SettingsState = {
@@ -23,17 +25,21 @@ const DEFAULTS: SettingsState = {
   rulerVisible: true,
   guidesVisible: true,
   layerIndexVisible: true,
+  toolbarExpanded: {},
 }
 
 export const GRID_STEP_OPTIONS = [1, 2, 5, 10]
 
 function load(): SettingsState {
+  // toolbarExpanded 是对象字段：必须深拷贝，否则多个 store 实例共享 DEFAULTS 里的同一引用
+  const fresh = (): SettingsState => ({ ...DEFAULTS, toolbarExpanded: { ...DEFAULTS.toolbarExpanded } })
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { ...DEFAULTS }
-    return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<SettingsState>) }
+    if (!raw) return fresh()
+    const parsed = JSON.parse(raw) as Partial<SettingsState>
+    return { ...fresh(), ...parsed, toolbarExpanded: { ...DEFAULTS.toolbarExpanded, ...parsed.toolbarExpanded } }
   } catch {
-    return { ...DEFAULTS }
+    return fresh()
   }
 }
 

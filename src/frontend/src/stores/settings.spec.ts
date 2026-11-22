@@ -41,3 +41,28 @@ describe('settings store 主题字段', () => {
     expect(store.layerIndexVisible).toBe(true)
   })
 })
+
+describe('settings store 顶栏分组展开态', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+  })
+
+  it('toolbarExpanded 默认空对象（全部分组收起）', () => {
+    expect(useSettingsStore().toolbarExpanded).toEqual({})
+  })
+
+  it('旧存储无 toolbarExpanded 键时合并补空对象', () => {
+    localStorage.setItem('imglayout.settings.v1', JSON.stringify({ theme: 'light' }))
+    setActivePinia(createPinia())
+    expect(useSettingsStore().toolbarExpanded).toEqual({})
+  })
+
+  it('persist 写入 toolbarExpanded 且再次加载保留', () => {
+    const store = useSettingsStore()
+    store.toolbarExpanded = { view: true }
+    store.persist()
+    setActivePinia(createPinia())
+    expect(useSettingsStore().toolbarExpanded).toEqual({ view: true })
+  })
+})

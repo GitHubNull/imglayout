@@ -10,6 +10,7 @@ import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
+import Popover from 'primevue/popover'
 import ProgressBar from 'primevue/progressbar'
 import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
@@ -48,6 +49,7 @@ app.component('IconField', IconField)
 app.component('InputIcon', InputIcon)
 app.component('InputNumber', InputNumber)
 app.component('InputText', InputText)
+app.component('Popover', Popover)
 app.component('ProgressBar', ProgressBar)
 app.component('Select', Select)
 app.component('SelectButton', SelectButton)

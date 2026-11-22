@@ -10,6 +10,10 @@ import LayerPanel from '../components/panels/LayerPanel.vue'
 import OutputPanel from '../components/panels/OutputPanel.vue'
 import PhotoPanel from '../components/panels/PhotoPanel.vue'
 import AlignBar from '../components/toolbar/AlignBar.vue'
+import FileGroup from '../components/toolbar/FileGroup.vue'
+import EditGroup from '../components/toolbar/EditGroup.vue'
+import ViewGroup from '../components/toolbar/ViewGroup.vue'
+import HelpGroup from '../components/toolbar/HelpGroup.vue'
 import StatusBar from '../components/statusbar/StatusBar.vue'
 import { useAssetsStore } from '../stores/assets'
 import { useProjectStore } from '../stores/project'
@@ -17,11 +21,9 @@ import { useSettingsStore } from '../stores/settings'
 import { useShortcutsStore } from '../stores/shortcuts'
 import { useProjectFile } from '../composables/useProjectFile'
 import { useGlobalShortcuts } from '../composables/useGlobalShortcuts'
+import { useCommandTip } from '../composables/useCommandTip'
 import { buildCommands } from '../lib/shortcuts/commands'
-import { displayChord } from '../lib/shortcuts/chords'
 import ShortcutsDialog from '../components/settings/ShortcutsDialog.vue'
-import AboutDialog from '../components/help/AboutDialog.vue'
-import TutorialDialog from '../components/help/TutorialDialog.vue'
 import type { AssetEntry } from '../types/layout'
 
 const project = useProjectStore()
@@ -30,6 +32,7 @@ const view = useCanvasView()
 const settings = useSettingsStore()
 const shortcuts = useShortcutsStore()
 const projectFile = useProjectFile()
+const tip = useCommandTip()
 
 useGlobalShortcuts(
   buildCommands({
@@ -38,12 +41,6 @@ useGlobalShortcuts(
     openProject: projectFile.openProject,
   }),
 )
-
-/** 顶栏按钮 tooltip：带当前键位，未绑定则只显示标题 */
-function tip(title: string, commandId: string): string {
-  const binding = shortcuts.bindingOf(commandId)
-  return binding ? `${title} (${displayChord(binding)})` : title
-}
 
 const stageRef = ref<InstanceType<typeof CanvasStage> | null>(null)
 // ToggleSwitch 是 boolean，store 是 'dark'|'light'，桥接一下
@@ -54,8 +51,6 @@ const darkMode = computed({
   },
 })
 const exportDialog = ref(false)
-const tutorialVisible = ref(false)
-const aboutVisible = ref(false)
 const exporting = ref(false)
 const exportDone = ref(0)
 const exportTotal = ref(0)
@@ -80,7 +75,7 @@ async function importPhotos() {
   }
 }
 
-const { saveProject, openProject } = projectFile
+const { saveProject } = projectFile
 
 let unlistenProgress: (() => void) | null = null
 
@@ -129,20 +124,6 @@ async function openExportFolder() {
   await revealItemInDir(lastExportPath.value)
 }
 
-function duplicateSelection() {
-  if (project.selectedIds.length) project.duplicateItems([...project.selectedIds])
-}
-
-function deleteSelection() {
-  // 与 Delete 快捷键同口径：参考线选中优先删参考线
-  if (project.selectedGuideIds.length) {
-    project.removeGuides([...project.selectedGuideIds])
-    return
-  }
-  const ids = project.selectedItems.filter((i) => !i.locked).map((i) => i.id)
-  if (ids.length) project.removeItems(ids)
-}
-
 let unsubscribeSettings: (() => void) | null = null
 
 onMounted(() => {
@@ -158,51 +139,16 @@ onBeforeUnmount(() => {
     <header class="toolbar">
       <Button label="导入照片" icon="pi pi-images" @click="importPhotos" />
       <Button icon="pi pi-save" text :title="tip('保存项目', 'save')" @click="saveProject" />
-      <Button label="另存为" icon="pi pi-save" text :title="tip('另存为…', 'save-as')" @click="projectFile.saveProjectAs" />
-      <Button icon="pi pi-folder-open" text :title="tip('打开项目…', 'open')" @click="openProject" />
-      <span class="sep" />
       <Button icon="pi pi-undo" text :disabled="project.undoStack.length === 0" :title="tip('撤销', 'undo')" @click="project.undo" />
       <Button icon="pi pi-refresh" text :disabled="project.redoStack.length === 0" :title="tip('重做', 'redo')" @click="project.redo" />
-      <span class="sep" />
-      <Button icon="pi pi-copy" text :title="tip('复制选中', 'duplicate')" :disabled="!project.selectedIds.length" @click="duplicateSelection" />
-      <Button icon="pi pi-trash" text severity="danger" :title="tip('删除选中', 'delete')" :disabled="!project.selectedItems.some((i) => !i.locked)" @click="deleteSelection" />
-      <Button icon="pi pi-sitemap" text :title="tip('组合', 'group')" :disabled="project.selectedItems.filter((i) => !i.locked && i.groupId == null).length < 2" @click="project.groupSelection()" />
-      <Button icon="pi pi-clone" text :title="tip('解组合', 'ungroup')" :disabled="!project.selectedItems.some((i) => i.groupId != null)" @click="project.ungroupSelection()" />
-      <span class="sep" />
       <AlignBar />
       <div class="spacer" />
-      <ToggleButton v-model="settings.gridVisible" on-icon="pi pi-th-large" off-icon="pi pi-th-large" on-label="" off-label="" :title="tip('显示网格', 'toggle-grid')" />
-      <Select
-        v-model="settings.gridStepMm"
-        :options="[
-          { label: '1mm', value: 1 },
-          { label: '2mm', value: 2 },
-          { label: '5mm', value: 5 },
-          { label: '10mm', value: 10 },
-        ]"
-        option-label="label"
-        option-value="value"
-        size="small"
-        class="step-select"
-        title="网格间距"
-      />
-      <ToggleButton v-model="settings.gridSnap" on-icon="pi pi-bolt" off-icon="pi pi-bolt" on-label="" off-label="" title="网格吸附" />
-      <ToggleButton v-model="settings.edgeSnap" on-icon="pi pi-arrow-down-left" off-icon="pi pi-arrow-down-left" on-label="" off-label="" title="边缘吸附" />
-      <ToggleButton v-model="settings.rulerVisible" on-icon="pi pi-table" off-icon="pi pi-table" on-label="" off-label="" :title="tip('标尺', 'toggle-ruler')" />
-      <ToggleButton v-model="settings.guidesVisible" on-icon="pi pi-arrows-alt" off-icon="pi pi-arrows-alt" on-label="" off-label="" :title="tip('参考线', 'toggle-guides')" />
-      <Button
-        icon="pi pi-times-circle"
-        text
-        title="清除全部参考线（锁定除外）"
-        :disabled="!(project.doc.guides ?? []).some((g) => !g.locked)"
-        @click="project.clearGuides()"
-      />
-      <span class="sep" />
       <span class="zoom">暗色</span>
       <ToggleSwitch v-model="darkMode" title="切换亮/暗主题" />
-      <Button icon="pi pi-cog" text title="快捷键设置" @click="shortcuts.dialogOpen = true" />
-      <Button icon="pi pi-question-circle" text title="使用教程" @click="tutorialVisible = true" />
-      <Button icon="pi pi-info-circle" text title="关于 imgLayout" @click="aboutVisible = true" />
+      <FileGroup />
+      <EditGroup />
+      <ViewGroup />
+      <HelpGroup />
       <Button label="导出…" icon="pi pi-download" @click="startExport" />
     </header>
 
@@ -223,14 +169,14 @@ onBeforeUnmount(() => {
         <CanvasStage ref="stageRef" :view="view" />
       </div>
       <aside class="side side-right">
-        <Tabs value="output">
+        <Tabs value="layout">
           <TabList>
-            <Tab value="output">输出</Tab>
             <Tab value="layout">布局</Tab>
+            <Tab value="output">输出</Tab>
           </TabList>
           <TabPanels>
-            <TabPanel value="output"><OutputPanel /></TabPanel>
             <TabPanel value="layout"><LayoutPanel /></TabPanel>
+            <TabPanel value="output"><OutputPanel /></TabPanel>
           </TabPanels>
         </Tabs>
       </aside>
@@ -285,8 +231,6 @@ onBeforeUnmount(() => {
       </div>
     </Dialog>
     <ShortcutsDialog v-model="shortcuts.dialogOpen" />
-    <TutorialDialog v-model="tutorialVisible" />
-    <AboutDialog v-model="aboutVisible" />
   </div>
 </template>
 
@@ -307,13 +251,6 @@ onBeforeUnmount(() => {
 }
 .spacer {
   flex: 1;
-}
-.sep {
-  width: 1px;
-  height: 20px;
-  background: var(--p-content-border-color);
-  margin: 0 4px;
-  flex-shrink: 0;
 }
 .zoom {
   font-size: 12px;
@@ -356,10 +293,6 @@ onBeforeUnmount(() => {
 }
 .zoom-readout {
   min-width: 56px;
-}
-.step-select {
-  width: 112px;
-  flex-shrink: 0;
 }
 .export-body {
   display: flex;
