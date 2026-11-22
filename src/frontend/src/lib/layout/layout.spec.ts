@@ -13,7 +13,7 @@ import {
 } from '../../types/layout'
 import { layoutGrid } from './grid'
 import { layoutMasonry } from './masonry'
-import { clampMinSize, snapGridTranslate, snapRectTranslate, snapTargets, snapValue } from './free'
+import { clampMinSize, snapGridTranslate, snapGuidePos, snapHitLines, snapRectTranslate, snapTargets, snapValue, SNAP_TOLERANCE_MM, SNAP_TOLERANCE_PX } from './free'
 
 function canvas(w: number, h: number): CanvasSpec {
   return { ...emptyDoc().canvas, widthMm: w, heightMm: h }
@@ -153,5 +153,32 @@ describe('free 吸附对拍', () => {
     const snapped2 = snapRectTranslate(rect, [], [15])
     expect(snapped2.xMm).toBe(99.7)
     expect(snapped2.yMm).toBe(15)
+  })
+
+  // 与 Rust 侧 free.rs tests 逐值一致（snap_guide_pos / snap_hit_lines）
+  it('动态容差：5px 容差在低缩放下放宽（mm 制等价）', () => {
+    expect(snapValue(11.0, [10.0], SNAP_TOLERANCE_PX / 3.3)).toBe(10.0)
+    expect(snapValue(11.0, [10.0], SNAP_TOLERANCE_MM)).toBe(11.0)
+  })
+
+  it('参考线吸附：画布中线/其他参考线/对象边缘/网格取近/容差外不动', () => {
+    const c = canvas(100, 100)
+    expect(snapGuidePos(50.4, 'x', c, [], [], null, SNAP_TOLERANCE_MM)).toBe(50)
+    expect(snapGuidePos(80.4, 'x', c, [80], [], null, SNAP_TOLERANCE_MM)).toBe(80)
+    expect(snapGuidePos(30.3, 'x', c, [], [{ xMm: 30, yMm: 40, wMm: 10, hMm: 10 }], null, SNAP_TOLERANCE_MM)).toBe(30)
+    expect(snapGuidePos(48.7, 'x', c, [], [{ xMm: 47.5, yMm: 0, wMm: 1, hMm: 1 }], 5, SNAP_TOLERANCE_MM)).toBe(48.5)
+    // 网格兜底：容差内无边缘目标命中时吸到最近网格点
+    expect(snapGuidePos(72.3, 'x', c, [], [], 5, SNAP_TOLERANCE_MM)).toBe(70)
+    expect(snapGuidePos(61.0, 'x', c, [], [], null, SNAP_TOLERANCE_MM)).toBe(61)
+  })
+
+  it('对齐命中线：双边同时命中/中线命中/未吸附为空', () => {
+    const r = snapRectTranslate({ xMm: 29.8, yMm: 10, wMm: 20, hMm: 20 }, [30, 50], [], SNAP_TOLERANCE_MM)
+    const hits = snapHitLines(r, [30, 50], [0, 100])
+    expect(hits.x).toEqual([30, 50])
+    expect(hits.y).toEqual([])
+    const r2 = snapRectTranslate({ xMm: 39.8, yMm: 10, wMm: 20, hMm: 20 }, [50], [], SNAP_TOLERANCE_MM)
+    expect(snapHitLines(r2, [50], []).x).toEqual([50])
+    expect(snapHitLines({ xMm: 33, yMm: 10, wMm: 20, hMm: 20 }, [30, 50], []).x).toEqual([])
   })
 })

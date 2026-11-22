@@ -3,8 +3,10 @@
 // 坐标换算全部经 useCanvasView，逻辑坐标一律毫米。
 import {
   snapGridTranslate,
+  snapHitLines,
   snapRectTranslate,
   snapTargets,
+  SNAP_TOLERANCE_PX,
 } from '../../lib/layout/free'
 import type { RectMm } from '../../types/layout'
 import { useProjectStore } from '../../stores/project'
@@ -44,8 +46,8 @@ export class InteractionController {
   private deps: Deps
   private state: DragState = null
   spaceDown = false
-  /** 拖动经过画布中轴时的高亮：'v'=垂直中线（水平方向居中），'h'=水平中线 */
-  axisHighlight: 'h' | 'v' | null = null
+  /** 拖动吸附命中目标处的对齐提示线（smart guides）：v=竖线 x 值，h=横线 y 值 */
+  alignLines: { v: number[]; h: number[] } | null = null
   private onKeyDown: (e: KeyboardEvent) => void
   private onKeyUp: (e: KeyboardEvent) => void
 
@@ -327,6 +329,8 @@ export class InteractionController {
         ...state.groupRects.map((g) => g.id),
       ])
       let snapped = draft
+      // 像素制动态容差：5px 换算毫米，缩放越小容差越大（PS 口径）
+      const tolMm = SNAP_TOLERANCE_PX / this.deps.view.pxPerMm.value
       if (settings.edgeSnap) {
         const others = project.doc.items
           .filter((i) => !movingIds.has(i.id))
@@ -336,15 +340,23 @@ export class InteractionController {
         const guides = settings.guidesVisible ? (project.doc.guides ?? []) : []
         const gx = guides.filter((g) => g.axis === 'x').map((g) => g.posMm)
         const gy = guides.filter((g) => g.axis === 'y').map((g) => g.posMm)
-        snapped = snapRectTranslate(draft, [...base, ...gx], [...base, ...gy])
+        const targetsX = [...base, ...gx]
+        const targetsY = [...base, ...gy]
+        snapped = snapRectTranslate(draft, targetsX, targetsY, tolMm)
+        const hits = snapHitLines(snapped, targetsX, targetsY)
+        this.alignLines = { v: hits.x, h: hits.y }
+      } else {
+        this.alignLines = null
       }
       if (settings.gridSnap) {
         const grid = snapGridTranslate(snapped, settings.gridStepMm)
-        // 两路吸附逐轴取更近者
+        // 两路吸附逐轴取更近者；边缘路未命中（delta 恒 ≤ 容差，> 容差即未命中）或整体关闭时网格路兜底
+        const noHitX = !settings.edgeSnap || Math.abs(snapped.xMm - draft.xMm) > tolMm
+        const noHitY = !settings.edgeSnap || Math.abs(snapped.yMm - draft.yMm) > tolMm
         snapped = {
           ...snapped,
-          xMm: Math.abs(grid.xMm - draft.xMm) < Math.abs(snapped.xMm - draft.xMm) ? grid.xMm : snapped.xMm,
-          yMm: Math.abs(grid.yMm - draft.yMm) < Math.abs(snapped.yMm - draft.yMm) ? grid.yMm : snapped.yMm,
+          xMm: noHitX || Math.abs(grid.xMm - draft.xMm) < Math.abs(snapped.xMm - draft.xMm) ? grid.xMm : snapped.xMm,
+          yMm: noHitY || Math.abs(grid.yMm - draft.yMm) < Math.abs(snapped.yMm - draft.yMm) ? grid.yMm : snapped.yMm,
         }
       }
       const dx = snapped.xMm - state.startRect.xMm
@@ -354,13 +366,6 @@ export class InteractionController {
         project.updateItemRect(g.id, { ...g.rect, xMm: g.rect.xMm + dx, yMm: g.rect.yMm + dy })
       }
       state.moved = true
-      // 中轴高亮：主拖动项中心落在画布中线上时点亮对应轴线
-      this.axisHighlight = null
-      const c = project.doc.canvas
-      const cx = snapped.xMm + snapped.wMm / 2
-      const cy = snapped.yMm + snapped.hMm / 2
-      if (Math.abs(cx - c.widthMm / 2) < 1e-6) this.axisHighlight = 'v'
-      if (Math.abs(cy - c.heightMm / 2) < 1e-6) this.axisHighlight = 'h'
     } else if (state.kind === 'resize') {
       project.updateItemRect(state.itemId, this.resizedRect(state, mm.x, mm.y))
       state.moved = true
@@ -433,7 +438,7 @@ export class InteractionController {
     if (state && 'moved' in state && state.moved) {
       useProjectStore().snapshot()
     }
-    this.axisHighlight = null
+    this.alignLines = null
     this.state = null
     this.deps.redraw()
   }

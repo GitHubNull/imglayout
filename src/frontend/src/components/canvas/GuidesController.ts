@@ -6,6 +6,7 @@ import type { Guide, GuideAxis } from '../../types/layout'
 import { useProjectStore } from '../../stores/project'
 import { useSettingsStore } from '../../stores/settings'
 import { RULER_BAND_PX } from '../../lib/ruler'
+import { snapGuidePos, SNAP_TOLERANCE_PX } from '../../lib/layout/free'
 import type { GuideDraft } from './drawGuides'
 
 /** 参考线命中阈值（屏幕像素） */
@@ -37,7 +38,14 @@ export class GuidesController {
   private state: DragState = null
   /** 拖出中的参考线草稿（绘制层读取） */
   draft: GuideDraft | null = null
+  /** 草稿/拖动中的参考线当前是否吸附在目标上（绘制层品红加粗反馈） */
+  draftSnapped = false
   hoveredId: string | null = null
+
+  /** 正在拖动中的参考线 id（绘制层对吸附中的拖动线品红反馈） */
+  get draggingId(): string | null {
+    return this.state?.kind === 'drag' ? this.state.id : null
+  }
 
   constructor(deps: Deps) {
     this.deps = deps
@@ -101,6 +109,26 @@ export class GuidesController {
     return axis === 'x' ? pxX <= RULER_BAND_PX : pxY >= h - RULER_BAND_PX
   }
 
+  /** 参考线吸附：画布边缘/中线、同轴其他参考线、对象边缘/中线、网格（跟随网格吸附开关） */
+  private snapPos(axis: GuideAxis, posMm: number, selfId: string | null): number {
+    const project = useProjectStore()
+    const settings = useSettingsStore()
+    const othersGuides = (project.doc.guides ?? []).filter(
+      (g) => g.axis === axis && g.id !== selfId,
+    )
+    const snapped = snapGuidePos(
+      posMm,
+      axis,
+      project.doc.canvas,
+      othersGuides.map((g) => g.posMm),
+      project.doc.items.map((i) => i.rect),
+      settings.gridSnap ? settings.gridStepMm : null,
+      SNAP_TOLERANCE_PX / this.deps.view.pxPerMm.value,
+    )
+    this.draftSnapped = Math.abs(snapped - posMm) > 1e-9
+    return snapped
+  }
+
   private handlePointerDown = (e: PointerEvent) => {
     if (!this.active() || e.button !== 0) return
     const project = useProjectStore()
@@ -146,9 +174,10 @@ export class GuidesController {
     }
     const mm = this.toMm(e)
     if (state.kind === 'create') {
-      state.posMm = state.axis === 'x' ? mm.x : mm.y
+      state.posMm = this.snapPos(state.axis, state.axis === 'x' ? mm.x : mm.y, null)
     } else {
-      useProjectStore().updateGuidePos(state.id, state.axis === 'x' ? mm.x : mm.y)
+      const posMm = this.snapPos(state.axis, state.axis === 'x' ? mm.x : mm.y, state.id)
+      useProjectStore().updateGuidePos(state.id, posMm)
       state.moved = true
     }
     this.syncDraft()
@@ -179,6 +208,7 @@ export class GuidesController {
     }
     this.state = null
     this.draft = null
+    this.draftSnapped = false
     this.deps.redraw()
   }
 

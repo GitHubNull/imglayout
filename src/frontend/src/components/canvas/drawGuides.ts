@@ -15,12 +15,17 @@ export interface GuidesDrawState {
   selectedIds: string[]
   hoveredId: string | null
   draft: GuideDraft | null
+  /** 正在拖动中的参考线 id */
+  draggingId?: string | null
+  /** 草稿/拖动中的参考线吸附在目标上时品红加粗 */
+  draftSnapped?: boolean
 }
 
 const COLOR_NORMAL = '#0EA5E9'
 const COLOR_HOVER = '#0284C7'
 const COLOR_SELECTED = '#F59E0B'
 const COLOR_DRAFT = 'rgba(14, 165, 233, 0.6)'
+const COLOR_SNAPPED = '#D946EF'
 
 function drawOne(
   ctx: CanvasRenderingContext2D,
@@ -83,8 +88,15 @@ export function drawGuides(
   for (const g of state.guides) {
     const isSel = selected.has(g.id)
     const isHover = state.hoveredId === g.id
-    const color = isSel ? COLOR_SELECTED : isHover ? COLOR_HOVER : COLOR_NORMAL
-    const width = isSel || isHover ? 2 : 1
+    const snapped = state.draggingId === g.id && !!state.draftSnapped
+    const color = snapped
+      ? COLOR_SNAPPED
+      : isSel
+        ? COLOR_SELECTED
+        : isHover
+          ? COLOR_HOVER
+          : COLOR_NORMAL
+    const width = snapped || isSel || isHover ? 2 : 1
     drawOne(ctx, view, c, g.axis, g.posMm, {
       color,
       width,
@@ -94,8 +106,8 @@ export function drawGuides(
   }
   if (state.draft) {
     drawOne(ctx, view, c, state.draft.axis, state.draft.posMm, {
-      color: COLOR_DRAFT,
-      width: 1,
+      color: state.draftSnapped ? COLOR_SNAPPED : COLOR_DRAFT,
+      width: state.draftSnapped ? 2 : 1,
       dashed: false,
     })
   }

@@ -1,7 +1,7 @@
 {
   "name": "imglayout",
   "private": true,
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "照片拼接打印布局工具：多图拼成一整张大图，用于网上冲印装裱",
   "scripts": {
     "dev": "bash script/dev.sh",

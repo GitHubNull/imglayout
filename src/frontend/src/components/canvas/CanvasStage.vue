@@ -243,7 +243,7 @@ function draw() {
 
   drawGrid()
   drawGuidesLayer()
-  drawAxisHighlight()
+  drawAlignLines()
   drawMarquee()
   if (settings.rulerVisible) drawRulers(ctx, view, w, h, c)
 }
@@ -256,6 +256,8 @@ function drawGuidesLayer() {
     selectedIds: project.selectedGuideIds,
     hoveredId: guidesCtl?.hoveredId ?? null,
     draft: guidesCtl?.draft ?? null,
+    draggingId: guidesCtl?.draggingId ?? null,
+    draftSnapped: guidesCtl?.draftSnapped ?? false,
   })
 }
 
@@ -291,10 +293,10 @@ function drawGrid() {
   ctx.restore()
 }
 
-/** 拖动经过画布水平/垂直中轴时的高亮引导线 */
-function drawAxisHighlight() {
-  const hl = controller?.axisHighlight
-  if (!hl || !ctx) return
+/** 拖动对齐提示线（PS smart guides 语义）：吸附命中的目标轴线画品红贯穿线 */
+function drawAlignLines() {
+  const lines = controller?.alignLines
+  if (!lines || !ctx) return
   const c = project.doc.canvas
   const b = c.bleedMm
   const x0 = view.screenX(-b, b)
@@ -302,15 +304,16 @@ function drawAxisHighlight() {
   const y0 = view.screenY(-b, b)
   const y1 = view.screenY(c.heightMm + b, b)
   ctx.save()
-  ctx.strokeStyle = 'rgba(59, 130, 246, 0.65)'
+  ctx.strokeStyle = 'rgba(236, 72, 153, 0.85)'
   ctx.lineWidth = 1
   ctx.beginPath()
-  if (hl === 'v') {
-    const x = view.screenX(c.widthMm / 2, b)
+  for (const v of lines.v) {
+    const x = Math.round(view.screenX(v, b)) + 0.5
     ctx.moveTo(x, y0)
     ctx.lineTo(x, y1)
-  } else {
-    const y = view.screenY(c.heightMm / 2, b)
+  }
+  for (const v of lines.h) {
+    const y = Math.round(view.screenY(v, b)) + 0.5
     ctx.moveTo(x0, y)
     ctx.lineTo(x1, y)
   }
