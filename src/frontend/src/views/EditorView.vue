@@ -13,12 +13,34 @@ import AlignBar from '../components/toolbar/AlignBar.vue'
 import { useAssetsStore } from '../stores/assets'
 import { useProjectStore } from '../stores/project'
 import { useSettingsStore } from '../stores/settings'
-import type { AssetEntry, LayoutDoc } from '../types/layout'
+import { useShortcutsStore } from '../stores/shortcuts'
+import { useProjectFile } from '../composables/useProjectFile'
+import { useGlobalShortcuts } from '../composables/useGlobalShortcuts'
+import { buildCommands } from '../lib/shortcuts/commands'
+import { displayChord } from '../lib/shortcuts/chords'
+import ShortcutsDialog from '../components/settings/ShortcutsDialog.vue'
+import type { AssetEntry } from '../types/layout'
 
 const project = useProjectStore()
 const assets = useAssetsStore()
 const view = useCanvasView()
 const settings = useSettingsStore()
+const shortcuts = useShortcutsStore()
+const projectFile = useProjectFile()
+
+useGlobalShortcuts(
+  buildCommands({
+    saveProject: projectFile.saveProject,
+    saveProjectAs: projectFile.saveProjectAs,
+    openProject: projectFile.openProject,
+  }),
+)
+
+/** 顶栏按钮 tooltip：带当前键位，未绑定则只显示标题 */
+function tip(title: string, commandId: string): string {
+  const binding = shortcuts.bindingOf(commandId)
+  return binding ? `${title} (${displayChord(binding)})` : title
+}
 
 const stageRef = ref<InstanceType<typeof CanvasStage> | null>(null)
 const exportDialog = ref(false)
@@ -38,29 +60,15 @@ async function importPhotos() {
   if (!paths) return
   const list = paths as string[]
   if (list.length === 0) return
-  const entries = await invoke<AssetEntry[]>('import_assets', { paths: list })
-  assets.addAll(entries)
-  project.addAssetsAsItems(entries)
+  const result = await invoke<{ entries: AssetEntry[]; errors: string[] }>('import_assets', { paths: list })
+  assets.addAll(result.entries)
+  project.addAssetsAsItems(result.entries)
+  if (result.errors.length) {
+    window.alert(`以下 ${result.errors.length} 张照片导入失败，其余已导入：\n${result.errors.join('\n')}`)
+  }
 }
 
-async function saveProject() {
-  const path = await save({
-    defaultPath: '未命名.imglayout.json',
-    filters: [{ name: 'imgLayout 项目', extensions: ['json'] }],
-  })
-  if (!path) return
-  await invoke('save_project', { path, doc: project.doc, assets: assets.asList() })
-}
-
-async function openProject() {
-  const path = await open({
-    filters: [{ name: 'imgLayout 项目', extensions: ['json'] }],
-  })
-  if (typeof path !== 'string') return
-  const file = await invoke<{ doc: LayoutDoc; assets: AssetEntry[] }>('load_project', { path })
-  assets.replaceAll(file.assets)
-  project.replaceDoc(file.doc)
-}
+const { saveProject, openProject } = projectFile
 
 let unlistenProgress: (() => void) | null = null
 
@@ -69,7 +77,7 @@ async function startExport() {
   exporting.value = false
   exportError.value = ''
   exportDone.value = 0
-  exportTotal.value = project.doc.items.length
+  exportTotal.value = project.doc.items.filter((i) => i.visible).length
   lastExportPath.value = ''
 }
 
@@ -109,35 +117,16 @@ async function openExportFolder() {
   await revealItemInDir(lastExportPath.value)
 }
 
-function onGlobalKeyDown(e: KeyboardEvent) {
-  if (!(e.ctrlKey || e.metaKey)) return
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-  if (e.key === 'z' && !e.shiftKey) {
-    e.preventDefault()
-    project.undo()
-  } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
-    e.preventDefault()
-    project.redo()
-  } else if (e.key === 's') {
-    e.preventDefault()
-    void saveProject()
-  } else if (e.key === 'j') {
-    e.preventDefault()
-    if (project.selectedIds.length) project.duplicateItems([...project.selectedIds])
-  } else if (e.key === 'g' && !e.shiftKey) {
-    e.preventDefault()
-    project.groupSelection()
-  } else if (e.key === 'g' && e.shiftKey) {
-    e.preventDefault()
-    project.ungroupSelection()
-  }
-}
-
 function duplicateSelection() {
   if (project.selectedIds.length) project.duplicateItems([...project.selectedIds])
 }
 
 function deleteSelection() {
+  // 与 Delete 快捷键同口径：参考线选中优先删参考线
+  if (project.selectedGuideIds.length) {
+    project.removeGuides([...project.selectedGuideIds])
+    return
+  }
   const ids = project.selectedItems.filter((i) => !i.locked).map((i) => i.id)
   if (ids.length) project.removeItems(ids)
 }
@@ -145,11 +134,9 @@ function deleteSelection() {
 let unsubscribeSettings: (() => void) | null = null
 
 onMounted(() => {
-  window.addEventListener('keydown', onGlobalKeyDown)
   unsubscribeSettings = settings.$subscribe(() => settings.persist())
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onGlobalKeyDown)
   unsubscribeSettings?.()
 })
 </script>
@@ -158,20 +145,21 @@ onBeforeUnmount(() => {
   <div class="editor">
     <header class="toolbar">
       <Button label="导入照片" icon="pi pi-images" @click="importPhotos" />
-      <Button icon="pi pi-save" text title="保存项目 (Ctrl+S)" @click="saveProject" />
-      <Button icon="pi pi-folder-open" text title="打开项目" @click="openProject" />
+      <Button icon="pi pi-save" text :title="tip('保存项目', 'save')" @click="saveProject" />
+      <Button label="另存为" icon="pi pi-save" text :title="tip('另存为…', 'save-as')" @click="projectFile.saveProjectAs" />
+      <Button icon="pi pi-folder-open" text :title="tip('打开项目…', 'open')" @click="openProject" />
       <span class="sep" />
-      <Button icon="pi pi-undo" text :disabled="project.undoStack.length === 0" title="撤销 (Ctrl+Z)" @click="project.undo" />
-      <Button icon="pi pi-redo" text :disabled="project.redoStack.length === 0" title="重做 (Ctrl+Shift+Z)" @click="project.redo" />
+      <Button icon="pi pi-undo" text :disabled="project.undoStack.length === 0" :title="tip('撤销', 'undo')" @click="project.undo" />
+      <Button icon="pi pi-refresh" text :disabled="project.redoStack.length === 0" :title="tip('重做', 'redo')" @click="project.redo" />
       <span class="sep" />
-      <Button icon="pi pi-copy" text title="复制选中 (Ctrl+J)" :disabled="!project.selectedIds.length" @click="duplicateSelection" />
-      <Button icon="pi pi-trash" text severity="danger" title="删除选中 (Delete)" :disabled="!project.selectedItems.some((i) => !i.locked)" @click="deleteSelection" />
-      <Button icon="pi pi-sitemap" text title="组合 (Ctrl+G)" :disabled="project.selectedItems.filter((i) => !i.locked && i.groupId == null).length < 2" @click="project.groupSelection()" />
-      <Button icon="pi pi-clone" text title="解组合 (Ctrl+Shift+G)" :disabled="!project.selectedItems.some((i) => i.groupId != null)" @click="project.ungroupSelection()" />
+      <Button icon="pi pi-copy" text :title="tip('复制选中', 'duplicate')" :disabled="!project.selectedIds.length" @click="duplicateSelection" />
+      <Button icon="pi pi-trash" text severity="danger" :title="tip('删除选中', 'delete')" :disabled="!project.selectedItems.some((i) => !i.locked)" @click="deleteSelection" />
+      <Button icon="pi pi-sitemap" text :title="tip('组合', 'group')" :disabled="project.selectedItems.filter((i) => !i.locked && i.groupId == null).length < 2" @click="project.groupSelection()" />
+      <Button icon="pi pi-clone" text :title="tip('解组合', 'ungroup')" :disabled="!project.selectedItems.some((i) => i.groupId != null)" @click="project.ungroupSelection()" />
       <span class="sep" />
       <AlignBar />
       <div class="spacer" />
-      <ToggleButton v-model="settings.gridVisible" on-icon="pi pi-th-large" off-icon="pi pi-th-large" on-label="" off-label="" title="显示网格" />
+      <ToggleButton v-model="settings.gridVisible" on-icon="pi pi-th-large" off-icon="pi pi-th-large" on-label="" off-label="" :title="tip('显示网格', 'toggle-grid')" />
       <Select
         v-model="settings.gridStepMm"
         :options="[
@@ -188,8 +176,8 @@ onBeforeUnmount(() => {
       />
       <ToggleButton v-model="settings.gridSnap" on-icon="pi pi-bolt" off-icon="pi pi-bolt" on-label="" off-label="" title="网格吸附" />
       <ToggleButton v-model="settings.edgeSnap" on-icon="pi pi-arrow-down-left" off-icon="pi pi-arrow-down-left" on-label="" off-label="" title="边缘吸附" />
-      <ToggleButton v-model="settings.rulerVisible" on-icon="pi pi-table" off-icon="pi pi-table" on-label="" off-label="" title="标尺" />
-      <ToggleButton v-model="settings.guidesVisible" on-icon="pi pi-arrows-alt" off-icon="pi pi-arrows-alt" on-label="" off-label="" title="参考线" />
+      <ToggleButton v-model="settings.rulerVisible" on-icon="pi pi-table" off-icon="pi pi-table" on-label="" off-label="" :title="tip('标尺', 'toggle-ruler')" />
+      <ToggleButton v-model="settings.guidesVisible" on-icon="pi pi-arrows-alt" off-icon="pi pi-arrows-alt" on-label="" off-label="" :title="tip('参考线', 'toggle-guides')" />
       <Button
         icon="pi pi-times-circle"
         text
@@ -203,6 +191,7 @@ onBeforeUnmount(() => {
       <Button label="适应" text @click="stageRef?.fitView(); stageRef?.zoomStep(1)" />
       <Button icon="pi pi-plus" text title="放大" @click="stageRef?.zoomStep(1.25)" />
       <span class="zoom">{{ project.doc.items.length }} 张 · {{ project.doc.canvas.widthMm }}×{{ project.doc.canvas.heightMm }}mm</span>
+      <Button icon="pi pi-cog" text title="快捷键设置" @click="shortcuts.dialogOpen = true" />
       <Button label="导出…" icon="pi pi-download" @click="startExport" />
     </header>
 
@@ -282,6 +271,7 @@ onBeforeUnmount(() => {
         </template>
       </div>
     </Dialog>
+    <ShortcutsDialog v-model="shortcuts.dialogOpen" />
   </div>
 </template>
 

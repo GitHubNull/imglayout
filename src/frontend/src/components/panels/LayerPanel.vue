@@ -35,9 +35,20 @@ function toggleLocked(item: PhotoItem) {
   project.updateItem(item.id, { locked: !item.locked })
 }
 
+// 滑杆手势：首次变更前记一次历史，整个拖动过程合并为一步撤销
+let sliding = false
+
 function setOpacity(item: PhotoItem, percent: number | number[] | undefined) {
   if (typeof percent !== 'number') return
+  if (!sliding) {
+    project.snapshot()
+    sliding = true
+  }
   project.updateItem(item.id, { opacity: Math.min(100, Math.max(0, percent)) / 100 })
+}
+
+function endOpacityGesture() {
+  sliding = false
 }
 
 // ---- 双击重命名 ----
@@ -164,6 +175,7 @@ const selectedSet = computed(() => new Set(project.selectedIds))
         />
         <img v-if="assets.thumbUrl(item.assetId)" :src="assets.thumbUrl(item.assetId)!" class="thumb" alt="" draggable="false" />
         <div v-else class="thumb placeholder" />
+        <span v-if="assets.missing.has(item.assetId)" class="missing-badge" title="项目包中缺少该照片的图像数据">缺失</span>
         <InputText
           v-if="editingId === item.id"
           :ref="setRenameRef"
@@ -193,7 +205,7 @@ const selectedSet = computed(() => new Set(project.selectedIds))
     <div v-if="selected" class="layer-footer">
       <label class="field">
         <span>不透明度：{{ Math.round(selected.opacity * 100) }}%</span>
-        <Slider :model-value="selected.opacity * 100" :min="0" :max="100" class="w-full" @update:model-value="setOpacity(selected, $event)" @slideend="project.snapshot()" />
+        <Slider :model-value="selected.opacity * 100" :min="0" :max="100" class="w-full" @update:model-value="setOpacity(selected, $event)" @slideend="endOpacityGesture()" />
       </label>
       <div class="footer-actions">
         <Button label="复制图层" icon="pi pi-copy" size="small" text @click="project.duplicateItem(selected.id)" />
@@ -272,6 +284,14 @@ const selectedSet = computed(() => new Set(project.selectedIds))
   border-radius: 4px;
   background: #d8d8d4;
   flex-shrink: 0;
+}
+.missing-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--p-red-500);
+  color: #fff;
 }
 .name {
   flex: 1;

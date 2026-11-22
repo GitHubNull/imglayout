@@ -65,11 +65,53 @@
 {
   "assetId": "asset-uuid",
   "path": "/abs/path/original.jpg",   // 原图路径，导出时读取
-  "thumbPath": "/abs/path/thumb.jpg", // ≤2000px 缩略图，预览用
+  "thumbPath": "/abs/path/thumb.jpg", // ≤2000px 缩略图，预览用；空串 = 图像数据缺失（UI 显示「缺失」）
   "widthPx": 4032,
   "heightPx": 3024
 }
 ```
+
+## .imglayout 项目包（v1.1 起，推荐格式）
+
+单文件包（zip，deflate），类似 PSD：内含布局清单 + 嵌入原图，可移动可分享，不丢图。
+
+```
+xxx.imglayout          # zip
+├── layout.yaml        # PackageManifest（YAML）
+└── assets/<fileName>  # 嵌入原图，fileName = <assetId>.<原扩展名>
+```
+
+`layout.yaml` = `version` + `doc`（即 LayoutDoc，字段与上文 JSON 口径完全一致，YAML 键 camelCase）+ `assets: PackagedAsset[]`：
+
+```yaml
+version: 1
+doc:
+  version: 1
+  canvas: { widthMm: 297, heightMm: 210, dpi: 300, background: '#FFFFFF', bleedMm: 0 }
+  mode: free
+  items: [ /* PhotoItem[]，同 LayoutDoc */ ]
+assets:
+  - assetId: asset-uuid
+    fileName: asset-uuid.jpg
+    widthPx: 4032
+    heightPx: 3024
+    sourcePath: /abs/path/original.jpg   # 保存时的原图绝对路径；null/缺省 = 未知
+```
+
+保存/加载语义：
+
+- 保存：逐 asset 取图像字节（原图 → 上次打开该包的提取副本 → 记缺失），缺失非空时报错清单，确认 `allowMissing` 后可跳过缺失继续保存（缺失 asset 只进清单不进包）。
+- 加载：校验 PK magic、拒绝 zip-slip（`..`/绝对路径/反斜杠条目）；原图解压到 `appdata/packages/<包名>/`（重名自动 `_1` 递增）；`sourcePath` 仍存在则继续引用原图，否则改指提取副本；缩略图不存包内，由 `ensure_thumbnail` 从 `path` 现算。
+- 兼容性：旧 `.json` 纯数据项目文件仍可打开/另存（`load_project`/`save_project` 不动）；单张原图缺失标记 `missingAssetIds` 继续加载，对应 `AssetEntry.thumbPath` 为空串。
+
+## 已知限制（预览 vs 导出）
+
+- **任意角度旋转**：预览在格内旋转并裁进原矩形；导出先扩画布旋转再 cover。90°/270° + 非正方框时两者结果不同。
+- **crop 窗口**：预览/导出都作用于翻转后的整图；预览在旋转角非 0 时与导出可能有像素级偏差。
+- **grid 相邻格**：毫米→像素逐格独立 round，导出可能有 1px 背景缝。
+- 预览 adjust（亮度/对比度/饱和度）用 CSS `filter` 近似，极端参数下与导出（逐像素计算）有微小差异；WebView 不支持 canvas filter 时预览不生效但导出正常。
+
+旧 JSON 项目文件结构（v1.0 及以前）：`ProjectFile = version + doc + assets`，`doc`/`assets` 字段同上。
 
 ## 算法语义
 

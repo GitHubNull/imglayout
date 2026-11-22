@@ -13,13 +13,39 @@ const THUMB_MAX_EDGE: u32 = 2000;
 const THUMB_QUALITY: u8 = 85;
 
 #[tauri::command]
-pub async fn import_assets(app: AppHandle, paths: Vec<String>) -> Result<Vec<AssetEntry>, String> {
+pub async fn import_assets(app: AppHandle, paths: Vec<String>) -> Result<ImportResult, String> {
     let thumbs_dir = thumbs_dir(&app)?;
+    Ok(import_many(&thumbs_dir, paths))
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportResult {
+    pub entries: Vec<AssetEntry>,
+    /// 逐文件错误（坏图/不支持格式等），不阻塞其余照片导入
+    pub errors: Vec<String>,
+}
+
+/// 逐张导入：单张失败仅记错误，其余照常导入
+pub fn import_many(thumbs_dir: &Path, paths: Vec<String>) -> ImportResult {
     let mut entries = Vec::with_capacity(paths.len());
+    let mut errors = Vec::new();
     for path in &paths {
-        entries.push(import_one(&thumbs_dir, path)?);
+        match import_one(thumbs_dir, path) {
+            Ok(entry) => entries.push(entry),
+            Err(e) => errors.push(e),
+        }
     }
-    Ok(entries)
+    ImportResult { entries, errors }
+}
+
+/// 按 EXIF 方向修正登记尺寸：5/6/7/8 = 90°/270° 旋转场景，宽高互换。
+/// 缩略图与导出都按方向旋转后的图像处理，登记尺寸必须同口径，否则 masonry 比例颠倒。
+fn dims_for_orientation(width: u32, height: u32, orientation: Option<u32>) -> (u32, u32) {
+    match orientation {
+        Some(5..=8) => (height, width),
+        _ => (width, height),
+    }
 }
 
 pub fn thumbs_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -38,13 +64,15 @@ pub fn thumb_path(thumbs_dir: &Path, asset_id: &str) -> PathBuf {
 }
 
 fn import_one(thumbs_dir: &Path, path: &str) -> Result<AssetEntry, String> {
-    let (width_px, height_px) =
+    let orientation = ops::orientation_from_exif(Path::new(path));
+    let (w, h) =
         image::image_dimensions(path).map_err(|e| format!("读取图片尺寸失败 {path}: {e}"))?;
+    let (width_px, height_px) = dims_for_orientation(w, h, orientation);
     let asset_id = uuid::Uuid::new_v4().to_string();
     let thumb = thumb_path(thumbs_dir, &asset_id);
 
     let dyn_img = image::open(path).map_err(|e| format!("图片解码失败 {path}: {e}"))?;
-    let oriented = ops::apply_orientation(dyn_img, ops::orientation_from_exif(Path::new(path)));
+    let oriented = ops::apply_orientation(dyn_img, orientation);
     let rgb = oriented.to_rgb8();
     let (w, h) = (rgb.width(), rgb.height());
     let scale = (THUMB_MAX_EDGE as f64 / w as f64)
@@ -103,5 +131,39 @@ mod tests {
     fn thumb_path_uses_asset_id() {
         let dir = Path::new("/tmp/x");
         assert_eq!(thumb_path(dir, "abc-123"), Path::new("/tmp/x/abc-123.jpg"));
+    }
+
+    #[test]
+    fn dims_for_orientation_swaps_on_rotated_exif() {
+        assert_eq!(dims_for_orientation(4032, 3024, Some(6)), (3024, 4032));
+        assert_eq!(dims_for_orientation(4032, 3024, Some(8)), (3024, 4032));
+        assert_eq!(dims_for_orientation(4032, 3024, Some(5)), (3024, 4032));
+        assert_eq!(dims_for_orientation(4032, 3024, Some(1)), (4032, 3024));
+        assert_eq!(dims_for_orientation(4032, 3024, None), (4032, 3024));
+    }
+
+    #[test]
+    fn import_many_continues_on_single_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let good = dir.path().join("good.jpg");
+        let img = image::RgbImage::from_pixel(8, 6, image::Rgb([10, 120, 30]));
+        let mut buf = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut buf)
+            .encode_image(&image::DynamicImage::ImageRgb8(img))
+            .unwrap();
+        fs::write(&good, &buf).unwrap();
+
+        let result = import_many(
+            dir.path(),
+            vec![
+                good.to_string_lossy().to_string(),
+                "/nonexistent/broken.jpg".to_string(),
+            ],
+        );
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].width_px, 8);
+        assert_eq!(result.entries[0].height_px, 6);
+        assert_eq!(result.errors.len(), 1);
+        assert!(result.errors[0].contains("broken.jpg"));
     }
 }

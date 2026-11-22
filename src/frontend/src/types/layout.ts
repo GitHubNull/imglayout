@@ -113,6 +113,16 @@ export interface AssetEntry {
   heightPx: number
 }
 
+/** .imglayout 包内 assets/<fileName> 条目的清单信息（layout.yaml 的 assets 数组） */
+export interface PackagedAsset {
+  assetId: string
+  fileName: string
+  widthPx: number
+  heightPx: number
+  /** 保存时的原图绝对路径；打开时若仍存在则继续引用原图，否则用包内提取副本 */
+  sourcePath: string | null
+}
+
 export interface Preset {
   id: string
   name: string

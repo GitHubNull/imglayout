@@ -46,6 +46,8 @@ export class InteractionController {
   private deps: Deps
   private state: DragState = null
   spaceDown = false
+  /** 多选状态下按下（未启动拖动）的候选缩选项；pointerup 未移动则缩选到它 */
+  private collapseCandidate: string | null = null
   /** 拖动吸附命中目标处的对齐提示线（smart guides）：v=竖线 x 值，h=横线 y 值 */
   alignLines: { v: number[]; h: number[] } | null = null
   private onKeyDown: (e: KeyboardEvent) => void
@@ -102,26 +104,6 @@ export class InteractionController {
       wMm: Math.abs(curXmm - startXmm),
       hMm: Math.abs(curYmm - startYmm),
     }
-  }
-
-  nudgeSelected(dxMm: number, dyMm: number) {
-    const project = useProjectStore()
-    if (project.doc.mode !== 'free') return
-    for (const item of project.selectedItems) {
-      if (item.locked) continue
-      project.updateItemRect(item.id, {
-        ...item.rect,
-        xMm: item.rect.xMm + dxMm,
-        yMm: item.rect.yMm + dyMm,
-      })
-    }
-    this.deps.redraw()
-  }
-
-  deleteSelected() {
-    const project = useProjectStore()
-    const ids = project.selectedItems.filter((i) => !i.locked).map((i) => i.id)
-    if (ids.length) project.removeItems(ids)
   }
 
   private bleed(): number {
@@ -245,13 +227,17 @@ export class InteractionController {
     }
 
     if (itemId && project.selectedIds.includes(itemId) && project.selectedIds.length > 1) {
-      // 点在已多选的成员上：保持选择，拖动整组
-      this.startMove(project, itemId, mm)
+      // 点在已多选的成员上：保持选择拖动整组；锁定层不启动拖动，
+      // pointerup 时未移动则缩选到该张（PS 口径）
+      const hitItem = project.doc.items.find((i) => i.id === itemId)
+      if (!hitItem?.locked) this.startMove(project, itemId, mm)
+      else this.collapseCandidate = itemId
       this.deps.redraw()
       return
     }
 
     project.select(itemId)
+    project.clearGuideSelection()
     if (itemId && project.doc.mode === 'free') {
       const item = project.doc.items.find((i) => i.id === itemId)!
       if (item.locked) {
@@ -361,21 +347,27 @@ export class InteractionController {
       }
       const dx = snapped.xMm - state.startRect.xMm
       const dy = snapped.yMm - state.startRect.yMm
+      this.beginMutation(state)
       project.updateItemRect(state.itemId, snapped)
       for (const g of state.groupRects) {
         project.updateItemRect(g.id, { ...g.rect, xMm: g.rect.xMm + dx, yMm: g.rect.yMm + dy })
       }
-      state.moved = true
     } else if (state.kind === 'resize') {
+      this.beginMutation(state)
       project.updateItemRect(state.itemId, this.resizedRect(state, mm.x, mm.y))
-      state.moved = true
     } else if (state.kind === 'rotate') {
+      this.beginMutation(state)
       const deg = (Math.atan2(mm.y - state.centerYmm, mm.x - state.centerXmm) * 180) / Math.PI
       const rotation = (deg + 90 + 360) % 360
       project.updateItem(state.itemId, { rotation: Math.round(rotation) })
-      state.moved = true
     }
     this.deps.redraw()
+  }
+
+  /** 首次实际改动前记一次历史（快照必须在变更之前，否则撤销弹回的是新状态） */
+  private beginMutation(state: { moved: boolean }) {
+    if (!state.moved) useProjectStore().snapshot()
+    state.moved = true
   }
 
   private resizedRect(
@@ -409,6 +401,19 @@ export class InteractionController {
 
   private handlePointerUp = (e: PointerEvent) => {
     const state = this.state
+    // 点在已多选成员上但未拖动（含锁定层）：缩选到该张（PS 口径）
+    if (!state && this.collapseCandidate) {
+      const id = this.collapseCandidate
+      this.collapseCandidate = null
+      const project = useProjectStore()
+      if (project.selectedIds.length > 1) project.select(id)
+      return
+    }
+    this.collapseCandidate = null
+    if (state?.kind === 'move' && !state.moved && useProjectStore().selectedIds.length > 1) {
+      useProjectStore().select(state.itemId)
+      return
+    }
     if (state?.kind === 'pan') {
       this.deps.stage.style.cursor = this.spaceDown ? 'grab' : ''
     } else if (state?.kind === 'marquee') {
@@ -435,9 +440,7 @@ export class InteractionController {
         project.selectedIds = hit
       }
     }
-    if (state && 'moved' in state && state.moved) {
-      useProjectStore().snapshot()
-    }
+    // 历史已在首次改动前（beginMutation）记录，此处不再快照
     this.alignLines = null
     this.state = null
     this.deps.redraw()

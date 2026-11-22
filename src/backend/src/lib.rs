@@ -16,6 +16,8 @@ pub fn run() {
             commands::presets::list_presets,
             commands::project::save_project,
             commands::project::load_project,
+            commands::package::save_project_package,
+            commands::package::load_project_package,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

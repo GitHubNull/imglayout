@@ -1,0 +1,100 @@
+name: Release
+
+# 语义化版本 tag 触发发布：v1.2.3 / v1.2.3-beta.1 / v1.2.3-test.2
+# 预发布（-beta/-test）自动标记为 GitHub Prerelease。
+# 注意：本 workflow 尚未经真实运行验证（Actions 额度受限），首次发布请先用 v*-test.1 验证。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    outputs:
+      prerelease: ${{ steps.semver.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 校验 tag 语义化版本（仅支持 beta/test 预发布）
+        id: semver
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(beta|test)\.(0|[1-9][0-9]*))?$ ]]; then
+            echo "::error::Tag '$TAG' 不符合语义化版本，支持的格式：v1.0.0 / v1.0.0-beta.1 / v1.0.0-test.1"
+            exit 1
+          fi
+          PRERELEASE=false
+          if [[ "$TAG" =~ -(beta|test)\.[0-9]+$ ]]; then
+            PRERELEASE=true
+          fi
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: 校验 tag 与工程文件版本一致
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          VERSION="${VERSION%%-*}"
+          NODE_VERSION="$(node -p 'JSON.parse(require("fs").readFileSync("package.json","utf8")).version')"
+          TAURI_VERSION="$(node -p 'JSON.parse(require("fs").readFileSync("src/backend/tauri.conf.json","utf8")).version')"
+          CARGO_VERSION="$(grep -m1 '^version = ' src/backend/Cargo.toml | sed 's/version = "\(.*\)"/\1/')"
+          echo "tag=$VERSION root=$NODE_VERSION tauri=$TAURI_VERSION cargo=$CARGO_VERSION"
+          for V in "$NODE_VERSION" "$TAURI_VERSION" "$CARGO_VERSION"; do
+            if [[ "$V" != "$VERSION" ]]; then
+              echo "::error::版本不一致：tag 为 $VERSION，但工程文件为 $V（根 package.json / tauri.conf.json / Cargo.toml 需同步）"
+              exit 1
+            fi
+          done
+
+  publish:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: 安装依赖（根 workspace）
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建前端
+        run: pnpm --dir src/frontend build
+
+      - name: 安装 Linux 系统依赖
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: 打包并发布 Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: src/backend
+          tagName: ${{ github.ref_name }}
+          releaseName: imgLayout ${{ github.ref_name }}
+          releaseBody: 更新内容见 CHANGELOG.md 中本版本章节。
+          prerelease: ${{ needs.validate.outputs.prerelease }}
+          releaseDraft: false
+          # Linux 出 deb+appimage，Windows 出 nsis；避开 targets:"all" 在 CI 上的 rpm 依赖
+          args: ${{ matrix.os == 'ubuntu-22.04' && '--bundles deb,appimage' || '--bundles nsis' }}

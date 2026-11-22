@@ -9,8 +9,9 @@ const item = computed<PhotoItem | null>(() => project.selectedItem)
 
 function patch(p: Partial<PhotoItem>, recordHistory = false) {
   if (!item.value) return
-  project.updateItem(item.value.id, p)
+  // 快照必须先于变更，否则撤销弹回的是新状态
   if (recordHistory) project.snapshot()
+  project.updateItem(item.value.id, p)
 }
 
 function patchAdjust(field: 'brightness' | 'contrast' | 'saturation', v: number | undefined) {
@@ -26,10 +27,23 @@ function num(v: number | number[] | undefined): number | undefined {
 
 function rotateBy(delta: number) {
   if (!item.value) return
+  project.snapshot()
   project.updateItem(item.value.id, {
     rotation: (item.value.rotation + delta + 360) % 360,
   })
+}
+
+/** 滑杆手势：首次变更前记一次历史，整个拖动过程合并为一步撤销 */
+let gestureActive = false
+
+function beginAdjust() {
+  if (!item.value || gestureActive) return
   project.snapshot()
+  gestureActive = true
+}
+
+function endAdjust() {
+  gestureActive = false
 }
 </script>
 
@@ -46,8 +60,8 @@ function rotateBy(delta: number) {
         :min="0"
         :max="359"
         class="w-full"
-        @update:model-value="(v) => patch({ rotation: num(v) ?? 0 })"
-        @slideend="project.snapshot()"
+        @update:model-value="(v) => { beginAdjust(); patch({ rotation: num(v) ?? 0 }) }"
+        @slideend="endAdjust()"
       />
     </label>
     <div class="row-2">
@@ -69,24 +83,24 @@ function rotateBy(delta: number) {
 
     <label class="field">
       <span>亮度：{{ item.adjust.brightness.toFixed(2) }}</span>
-      <Slider :model-value="item.adjust.brightness" :min="0" :max="2" :step="0.01" class="w-full" @update:model-value="(v) => patchAdjust('brightness', num(v))" @slideend="project.snapshot()" />
+      <Slider :model-value="item.adjust.brightness" :min="0" :max="2" :step="0.01" class="w-full" @update:model-value="(v) => { beginAdjust(); patchAdjust('brightness', num(v)) }" @slideend="endAdjust()" />
     </label>
     <label class="field">
       <span>对比度：{{ item.adjust.contrast.toFixed(2) }}</span>
-      <Slider :model-value="item.adjust.contrast" :min="0" :max="2" :step="0.01" class="w-full" @update:model-value="(v) => patchAdjust('contrast', num(v))" @slideend="project.snapshot()" />
+      <Slider :model-value="item.adjust.contrast" :min="0" :max="2" :step="0.01" class="w-full" @update:model-value="(v) => { beginAdjust(); patchAdjust('contrast', num(v)) }" @slideend="endAdjust()" />
     </label>
     <label class="field">
       <span>饱和度：{{ item.adjust.saturation.toFixed(2) }}</span>
-      <Slider :model-value="item.adjust.saturation" :min="0" :max="2" :step="0.01" class="w-full" @update:model-value="(v) => patchAdjust('saturation', num(v))" @slideend="project.snapshot()" />
+      <Slider :model-value="item.adjust.saturation" :min="0" :max="2" :step="0.01" class="w-full" @update:model-value="(v) => { beginAdjust(); patchAdjust('saturation', num(v)) }" @slideend="endAdjust()" />
     </label>
 
     <label class="field">
       <span>圆角：{{ item.style.radiusMm.toFixed(1) }} mm</span>
-      <Slider :model-value="item.style.radiusMm" :min="0" :max="20" :step="0.5" class="w-full" @update:model-value="(v) => patch({ style: { ...item!.style, radiusMm: num(v) ?? 0 } })" @slideend="project.snapshot()" />
+      <Slider :model-value="item.style.radiusMm" :min="0" :max="20" :step="0.5" class="w-full" @update:model-value="(v) => { beginAdjust(); patch({ style: { ...item!.style, radiusMm: num(v) ?? 0 } }) }" @slideend="endAdjust()" />
     </label>
     <label class="field">
       <span>边框宽：{{ item.style.borderWidthMm.toFixed(1) }} mm</span>
-      <Slider :model-value="item.style.borderWidthMm" :min="0" :max="10" :step="0.5" class="w-full" @update:model-value="(v) => patch({ style: { ...item!.style, borderWidthMm: num(v) ?? 0 } })" @slideend="project.snapshot()" />
+      <Slider :model-value="item.style.borderWidthMm" :min="0" :max="10" :step="0.5" class="w-full" @update:model-value="(v) => { beginAdjust(); patch({ style: { ...item!.style, borderWidthMm: num(v) ?? 0 } }) }" @slideend="endAdjust()" />
     </label>
     <label v-if="item.style.borderWidthMm > 0" class="field">
       <span>边框颜色</span>

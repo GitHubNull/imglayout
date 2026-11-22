@@ -24,3 +24,9 @@ body,
   width: 100%;
   min-width: 0;
 }
+
+/* ColorPicker 预览块默认无边框，白色等浅色在白面板上不可见。
+   主题规则是单类选择器且运行时后注入，会盖过同优先级全局规则，故用双类提权 */
+.p-colorpicker .p-colorpicker-preview {
+  border: 1px solid var(--p-content-border-color);
+}

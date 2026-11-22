@@ -10,6 +10,8 @@ export function useCanvasView() {
   const pxPerMm = ref(3)
   const originX = ref(0)
   const originY = ref(0)
+  /** 自动适配态：未手动缩放/平移前为 true，容器 resize 时重新 fit；手动操作后转为 false（只保缩放重居中） */
+  const isAutoFit = ref(true)
 
   const zoomPercent = computed(() =>
     Math.round((pxPerMm.value / PX_PER_MM_AT_100) * 100),
@@ -33,6 +35,7 @@ export function useCanvasView() {
   }
 
   function zoomAt(screenPxX: number, screenPxY: number, factor: number) {
+    isAutoFit.value = false
     const next = clampScale(pxPerMm.value * factor)
     const applied = next / pxPerMm.value
     originX.value = screenPxX - (screenPxX - originX.value) * applied
@@ -41,11 +44,13 @@ export function useCanvasView() {
   }
 
   function panBy(dxPx: number, dyPx: number) {
+    isAutoFit.value = false
     originX.value += dxPx
     originY.value += dyPx
   }
 
   function fit(viewW: number, viewH: number, outWmm: number, outHmm: number) {
+    isAutoFit.value = true
     const margin = 48
     const scale = Math.min(
       (viewW - margin * 2) / outWmm,
@@ -66,6 +71,7 @@ export function useCanvasView() {
     pxPerMm,
     originX,
     originY,
+    isAutoFit,
     zoomPercent,
     screenX,
     screenY,

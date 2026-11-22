@@ -35,13 +35,19 @@ export function computeRects(
   }
   if (doc.mode === 'masonry' && doc.masonry) {
     const inputs: MasonryInput[] = []
-    for (const item of doc.items) {
+    const inputIdx: number[] = []
+    doc.items.forEach((item) => {
       const size = assetSizes.get(item.assetId)
-      if (!size) return []
-      inputs.push({ item, size })
-    }
-    return layoutMasonry(doc.canvas, doc.masonry, inputs)
-  }
+      if (size) {
+        inputIdx.push(inputs.length)
+        inputs.push({ item, size })
+      } else {
+        // 缺尺寸（图像数据缺失）只影响该张，其余照片照常排版
+        inputIdx.push(-1)
+      }
+    })
+    const laid = layoutMasonry(doc.canvas, doc.masonry, inputs)
+    return doc.items.map((_, i) => (inputIdx[i] < 0 ? null : laid[inputIdx[i]]))  }
   return doc.items.map((i) => i.rect)
 }
 
@@ -56,6 +62,10 @@ export const useProjectStore = defineStore('project', {
     selectedGuideIds: [] as string[],
     undoStack: [] as string[],
     redoStack: [] as string[],
+    /** 连续微调（方向键）期间只记一次历史，由 snapshot() 复位 */
+    nudging: false,
+    /** 自上次保存/打开以来是否有未保存修改 */
+    dirty: false,
   }),
   getters: {
     rects(state): (RectMm | null)[] {
@@ -80,6 +90,8 @@ export const useProjectStore = defineStore('project', {
   },
   actions: {
     snapshot() {
+      this.nudging = false
+      this.dirty = true
       this.undoStack.push(JSON.stringify(this.doc))
       if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift()
       this.redoStack = []
@@ -87,6 +99,8 @@ export const useProjectStore = defineStore('project', {
     undo() {
       const prev = this.undoStack.pop()
       if (prev == null) return
+      this.nudging = false
+      this.dirty = true
       this.redoStack.push(JSON.stringify(this.doc))
       this.doc = JSON.parse(prev)
       this.pruneSelection()
@@ -95,6 +109,8 @@ export const useProjectStore = defineStore('project', {
     redo() {
       const next = this.redoStack.pop()
       if (next == null) return
+      this.nudging = false
+      this.dirty = true
       this.undoStack.push(JSON.stringify(this.doc))
       this.doc = JSON.parse(next)
       this.pruneSelection()
@@ -125,6 +141,8 @@ export const useProjectStore = defineStore('project', {
       if (this.doc.mode === mode) return
       this.snapshot()
       this.doc.mode = mode
+      // 参考线仅 free 模式可交互：切走后清选中，避免 Delete 静默删掉不可见参考线
+      if (mode !== 'free') this.clearGuideSelection()
       if (mode === 'grid' && !this.doc.grid) this.doc.grid = defaultGrid()
       if (mode === 'masonry' && !this.doc.masonry) this.doc.masonry = defaultMasonry()
       if (mode === 'free') {
@@ -280,7 +298,7 @@ export const useProjectStore = defineStore('project', {
       this.doc.guides = [...(this.doc.guides ?? []), guide]
       this.selectedGuideIds = [guide.id]
     },
-    /** 拖动改位置高频调用，不 snapshot，由调用方在 pointerup 时统一 snapshot */
+    /** 拖动改位置高频调用，不 snapshot；历史由 GuidesController 在首次改动前记录 */
     updateGuidePos(id: string, posMm: number) {
       const g = (this.doc.guides ?? []).find((x) => x.id === id)
       if (g) g.posMm = posMm
@@ -319,12 +337,29 @@ export const useProjectStore = defineStore('project', {
     clearGuideSelection() {
       this.selectedGuideIds = []
     },
+    /** 方向键微调 1mm：仅自由布局；连续触发合并为一次撤销步 */
+    nudgeSelection(dxMm: number, dyMm: number) {
+      if (this.doc.mode !== 'free') return
+      const targets = this.selectedItems.filter((i) => !i.locked)
+      if (targets.length === 0) return
+      if (!this.nudging) this.snapshot()
+      this.nudging = true
+      for (const item of targets) {
+        item.rect = { ...item.rect, xMm: item.rect.xMm + dxMm, yMm: item.rect.yMm + dyMm }
+      }
+    },
     replaceDoc(doc: LayoutDoc) {
       this.doc = doc
       this.selectedIds = []
       this.selectedGuideIds = []
       this.undoStack = []
       this.redoStack = []
+      this.nudging = false
+      this.dirty = false
+    },
+    /** 保存/打开成功后调用，清除未保存标记 */
+    markClean() {
+      this.dirty = false
     },
   },
 })

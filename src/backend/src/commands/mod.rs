@@ -2,6 +2,7 @@
 
 pub mod assets;
 pub mod export;
+pub mod package;
 pub mod presets;
 pub mod project;
 

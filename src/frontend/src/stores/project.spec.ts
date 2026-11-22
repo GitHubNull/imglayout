@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { newItem } from '../types/layout'
+import { newItem, defaultMasonry } from '../types/layout'
 import { useProjectStore } from './project'
 
 function seed(store: ReturnType<typeof useProjectStore>, ids: string[]) {
@@ -207,5 +207,37 @@ describe('project store 对齐/分布', () => {
     store.select('b')
     store.alignSelection('left', { xMm: 0, yMm: 0, wMm: 297, hMm: 210 })
     expect(store.doc.items[1].rect.xMm).toBe(100)
+  })
+
+  it('masonry 缺尺寸的 asset 只影响该张，其余照常排版', async () => {
+    const { useAssetsStore } = await import('./assets')
+    const assets = useAssetsStore()
+    assets.entries.set('asset-a', { assetId: 'asset-a', path: '/a.jpg', thumbPath: '', widthPx: 100, heightPx: 100 })
+    assets.entries.set('asset-c', { assetId: 'asset-c', path: '/c.jpg', thumbPath: '', widthPx: 100, heightPx: 50 })
+    const store = useProjectStore()
+    seed(store, ['a', 'b', 'c'])
+    store.doc.mode = 'masonry'
+    store.doc.masonry = defaultMasonry()
+    const rects = store.rects
+    expect(rects).toHaveLength(3)
+    expect(rects[1]).toBeNull()
+    expect(rects[0]).not.toBeNull()
+    expect(rects[2]).not.toBeNull()
+  })
+
+  it('撤销后再次微调各自记快照（nudging 状态复位）', () => {
+    const store = useProjectStore()
+    seed(store, ['a'])
+    store.doc.mode = 'free'
+    store.doc.items[0].rect = { xMm: 0, yMm: 0, wMm: 10, hMm: 10 }
+    store.select('a')
+    store.nudgeSelection(1, 0)
+    expect(store.undoStack).toHaveLength(1)
+    store.undo()
+    store.nudgeSelection(1, 0)
+    // 若 nudging 未复位，第二次微调不会记快照，撤销会把两步一起回退
+    expect(store.undoStack).toHaveLength(1)
+    store.undo()
+    expect(store.doc.items[0].rect.xMm).toBe(0)
   })
 })

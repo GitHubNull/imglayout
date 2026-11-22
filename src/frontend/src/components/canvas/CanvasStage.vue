@@ -5,6 +5,7 @@ import { fillOf } from '../../stores/project'
 import { useProjectStore } from '../../stores/project'
 import { setAssetImageListener, useAssetsStore } from '../../stores/assets'
 import { InteractionController, HANDLES } from './InteractionController'
+import { useStageResize } from '../../composables/useStageResize'
 import { GuidesController, type GuideEditRequest } from './GuidesController'
 import { drawGuides } from './drawGuides'
 import { useSettingsStore } from '../../stores/settings'
@@ -25,7 +26,7 @@ const view = props.view
 let ctx: CanvasRenderingContext2D | null = null
 let controller: InteractionController | null = null
 let guidesCtl: GuidesController | null = null
-let resizeObserver: ResizeObserver | null = null
+let stageResize: ReturnType<typeof useStageResize> | null = null
 let rafPending = false
 
 function scheduleDraw() {
@@ -44,7 +45,7 @@ function outSizeMm(): { w: number; h: number } {
 
 function fitView() {
   const el = stageEl.value
-  if (!el) return
+  if (!el || el.clientWidth === 0 || el.clientHeight === 0) return
   const { w, h } = outSizeMm()
   view.fit(el.clientWidth, el.clientHeight, w, h)
 }
@@ -96,6 +97,12 @@ function drawItem(item: PhotoItem, rect: RectMm) {
     ctx!.rotate((item.rotation * Math.PI) / 180)
     ctx!.translate(-(dx + dw / 2), -(dy + dh / 2))
   }
+  // 翻转：变换顺序为 rotate∘flip（先调用旋转后调用 scale），与导出「先翻转后旋转」一致
+  if (item.flipH || item.flipV) {
+    ctx!.translate(dx + dw / 2, dy + dh / 2)
+    ctx!.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1)
+    ctx!.translate(-(dx + dw / 2), -(dy + dh / 2))
+  }
 
   // contain：格内留白填画布背景色
   if (fill === 'contain') {
@@ -104,31 +111,43 @@ function drawItem(item: PhotoItem, rect: RectMm) {
   }
 
   if (img && img.complete && img.naturalWidth > 0) {
-    const boxAspect = dw / dh
-    const srcAspect = img.naturalWidth / img.naturalHeight
+    // crop：先取归一化裁剪窗口，再在窗口内做 cover/contain 取样（导出口径：窗口作用于翻转后的整图）
     let sx = 0
     let sy = 0
     let sw = img.naturalWidth
     let sh = img.naturalHeight
+    if (item.crop) {
+      sx = item.crop.x * sw
+      sy = item.crop.y * sh
+      sw *= item.crop.w
+      sh *= item.crop.h
+    }
+    const boxAspect = dw / dh
+    const srcAspect = sw / sh
     let destX = dx
     let destY = dy
     let destW = dw
     let destH = dh
     if (fill === 'cover') {
       if (srcAspect > boxAspect) {
-        sw = img.naturalHeight * boxAspect
-        sx = (img.naturalWidth - sw) / 2
+        const w = sh * boxAspect
+        sx += (sw - w) / 2
+        sw = w
       } else {
-        sh = img.naturalWidth / boxAspect
-        sy = (img.naturalHeight - sh) / 2
+        const h = sw / boxAspect
+        sy += (sh - h) / 2
+        sh = h
       }
     } else {
-      const scale = Math.min(dw / img.naturalWidth, dh / img.naturalHeight)
-      destW = img.naturalWidth * scale
-      destH = img.naturalHeight * scale
+      const scale = Math.min(dw / sw, dh / sh)
+      destW = sw * scale
+      destH = sh * scale
       destX = dx + (dw - destW) / 2
       destY = dy + (dh - destH) / 2
     }
+    // 亮度/对比度/饱和度：CSS filter 与导出 apply_adjust 对齐（WebView 不支持时静默忽略）
+    const a = item.adjust
+    ctx!.filter = `brightness(${a.brightness}) contrast(${a.contrast}) saturate(${a.saturation})`
     ctx!.drawImage(img, sx, sy, sw, sh, destX, destY, destW, destH)
   } else {
     // 缩略图未就绪：占位灰
@@ -337,30 +356,10 @@ function drawMarquee() {
   ctx.restore()
 }
 
-function onKeyDown(e: KeyboardEvent) {
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-  const project = useProjectStore()
-  if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (project.selectedGuideIds.length) {
-      project.removeGuides([...project.selectedGuideIds])
-      scheduleDraw()
-    } else {
-      controller?.deleteSelected()
-    }
-  } else if (e.key === 'Escape') {
-    project.clearSelection()
-    project.clearGuideSelection()
-    guideEdit.value = null
-    scheduleDraw()
-  } else if (e.key === 'ArrowLeft' && e.shiftKey) {
-    controller?.nudgeSelected(-1, 0)
-  } else if (e.key === 'ArrowRight' && e.shiftKey) {
-    controller?.nudgeSelected(1, 0)
-  } else if (e.key === 'ArrowUp' && e.shiftKey) {
-    controller?.nudgeSelected(0, -1)
-  } else if (e.key === 'ArrowDown' && e.shiftKey) {
-    controller?.nudgeSelected(0, 1)
-  }
+/** 全局「取消选择」命令（Escape）派发的清理：关闭参考线精确编辑弹层 */
+function onEditorEscape() {
+  guideEdit.value = null
+  scheduleDraw()
 }
 
 interface GuideEditState {
@@ -422,12 +421,10 @@ onMounted(() => {
   guidesCtl.attach()
   controller = new InteractionController({ stage: stageEl.value!, view, redraw: scheduleDraw })
   controller.attach()
-  resizeObserver = new ResizeObserver(() => {
-    scheduleDraw()
-  })
-  resizeObserver.observe(stageEl.value!)
+  stageResize = useStageResize(stageEl, view, fitView, scheduleDraw)
+  stageResize.observe()
   setAssetImageListener(scheduleDraw)
-  window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('imglayout:escape', onEditorEscape)
   watch(() => project.doc, scheduleDraw, { deep: true })
   watch(() => project.selectedIds, scheduleDraw, { deep: true })
   watch(() => settings.$state, scheduleDraw, { deep: true })
@@ -438,8 +435,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   guidesCtl?.detach()
   controller?.detach()
-  resizeObserver?.disconnect()
-  window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('imglayout:escape', onEditorEscape)
   setAssetImageListener(() => {})
 })
 </script>

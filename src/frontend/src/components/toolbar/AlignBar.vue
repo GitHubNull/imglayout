@@ -9,7 +9,7 @@ const project = useProjectStore()
 const alignRef = ref<'auto' | 'canvas'>('auto')
 
 const freeMode = computed(() => project.doc.mode === 'free')
-const selectedCount = computed(() => project.selectedItems.length)
+const movableCount = computed(() => project.selectedItems.filter((i) => !i.locked).length)
 
 const refRect = computed(() => {
   const c = project.doc.canvas
@@ -45,7 +45,7 @@ const distButtons: { mode: AlignOp; icon: string; title: string }[] = [
         :icon="`pi ${b.icon}`"
         :class="{ rot90: b.rot }"
         text
-        :disabled="!freeMode || selectedCount < 1"
+        :disabled="!freeMode || movableCount < 1"
         :title="b.title"
         @click="apply(b.mode)"
       />
@@ -56,7 +56,7 @@ const distButtons: { mode: AlignOp; icon: string; title: string }[] = [
       :key="b.mode"
       :icon="`pi ${b.icon}`"
       text
-      :disabled="!freeMode || selectedCount < 3"
+      :disabled="!freeMode || movableCount < 3"
       :title="b.title"
       @click="apply(b.mode)"
     />

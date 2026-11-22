@@ -7,6 +7,7 @@ import InputIcon from 'primevue/inputicon'
 import InputText from 'primevue/inputtext'
 import Slider from 'primevue/slider'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
+import { nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { newItem, type AssetEntry } from '../../types/layout'
 import { useAssetsStore } from '../../stores/assets'
@@ -127,5 +128,25 @@ describe('LayerPanel（PS 式图层面板）', () => {
     expect(project.selectedIds).toHaveLength(2)
     await rows[0].trigger('click', { ctrlKey: true })
     expect(project.selectedIds).toHaveLength(1)
+  })
+
+  it('不透明度滑杆：一次拖动合并为一步撤销，撤销恢复原值（快照先于变更）', async () => {
+    const wrapper = mountPanel(pinia)
+    project.select('a')
+    await nextTick()
+    const before = project.doc.items[0].opacity
+    const stackBefore = project.undoStack.length
+
+    const slider = wrapper.findComponent(Slider)
+    expect(slider.exists()).toBe(true)
+    // 模拟一次拖动手势：连续多次变更后 slideend
+    await slider.vm.$emit('update:model-value', 40)
+    await slider.vm.$emit('update:model-value', 70)
+    await slider.vm.$emit('slideend')
+
+    expect(project.doc.items[0].opacity).toBeCloseTo(0.7)
+    expect(project.undoStack.length).toBe(stackBefore + 1)
+    project.undo()
+    expect(project.doc.items[0].opacity).toBe(before)
   })
 })

@@ -177,7 +177,10 @@ export class GuidesController {
       state.posMm = this.snapPos(state.axis, state.axis === 'x' ? mm.x : mm.y, null)
     } else {
       const posMm = this.snapPos(state.axis, state.axis === 'x' ? mm.x : mm.y, state.id)
-      useProjectStore().updateGuidePos(state.id, posMm)
+      const project = useProjectStore()
+      // 首次实际改动前记历史（快照必须先于变更，否则撤销弹回新状态）
+      if (!state.moved) project.snapshot()
+      project.updateGuidePos(state.id, posMm)
       state.moved = true
     }
     this.syncDraft()
@@ -199,11 +202,9 @@ export class GuidesController {
         })
       }
     } else {
-      // 拖回标尺带 = 删除
+      // 拖回标尺带 = 删除；历史已在首次改动前记录
       if (this.inRulerBand(state.axis, pxX, pxY)) {
         project.removeGuides([state.id])
-      } else if (state.moved) {
-        project.snapshot()
       }
     }
     this.state = null
