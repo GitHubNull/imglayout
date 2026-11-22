@@ -97,5 +97,6 @@ const distButtons: { mode: AlignOp; icon: string; title: string }[] = [
 .ref-select {
   width: 74px;
   margin-left: 4px;
+  flex-shrink: 0;
 }
 </style>

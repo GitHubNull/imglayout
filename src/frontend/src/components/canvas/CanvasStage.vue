@@ -362,8 +362,8 @@ function drawRulers() {
     }
   }
 
-  // Y 轴：标签 = 距成品底缘的毫米值（= heightMm − mmY）
-  ctx.textAlign = 'right'
+  // Y 轴：标签 = 距成品底缘的毫米值（= heightMm − mmY），左对齐防三位数被裁
+  ctx.textAlign = 'left'
   for (let v = Math.ceil(-b / step) * step; v <= c.heightMm + b + 1e-6; v += step) {
     const y = Math.round(view.screenY(v, b)) + 0.5
     ctx.beginPath()
@@ -371,7 +371,7 @@ function drawRulers() {
     ctx.lineTo(R - (Math.abs(v % (step * 5)) < 1e-6 ? 7 : 4), y)
     ctx.stroke()
     if (v >= -1e-6 && v <= c.heightMm + 1e-6) {
-      ctx.fillText(String(Math.round((c.heightMm - v) * 10) / 10), R - 9, y + 3)
+      ctx.fillText(String(Math.round((c.heightMm - v) * 10) / 10), 2, y + 3)
     }
   }
   ctx.restore()

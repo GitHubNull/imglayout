@@ -279,7 +279,8 @@ onBeforeUnmount(() => {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--p-content-border-color);
   background: var(--p-content-background);
@@ -325,7 +326,8 @@ onBeforeUnmount(() => {
   min-width: 56px;
 }
 .step-select {
-  width: 76px;
+  width: 112px;
+  flex-shrink: 0;
 }
 .export-body {
   display: flex;
