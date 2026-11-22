@@ -1,6 +1,7 @@
 // 标尺刻度步长与标尺绘制：保证相邻主刻度在屏幕上至少间隔 MIN_TICK_PX 像素
 import type { useCanvasView } from '../composables/useCanvasView'
 import type { CanvasSpec } from '../types/layout'
+import type { RulerPalette } from './canvasTheme'
 
 const MIN_TICK_PX = 8
 /** 标尺带宽度（屏幕像素，固定）；交互命中（拖出参考线）也用这个值 */
@@ -22,6 +23,7 @@ export function drawRulers(
   w: number,
   h: number,
   c: CanvasSpec,
+  pal: RulerPalette,
 ) {
   const s = view.pxPerMm.value
   const b = c.bleedMm
@@ -29,10 +31,10 @@ export function drawRulers(
   const step = rulerSteps(s)
 
   ctx.save()
-  ctx.fillStyle = 'rgba(250, 250, 249, 0.94)'
+  ctx.fillStyle = pal.bandBg
   ctx.fillRect(0, 0, R, h)
   ctx.fillRect(0, h - R, w, R)
-  ctx.strokeStyle = '#D6D3D1'
+  ctx.strokeStyle = pal.bandStroke
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(R + 0.5, 0)
@@ -41,8 +43,8 @@ export function drawRulers(
   ctx.lineTo(w, h - R + 0.5)
   ctx.stroke()
 
-  ctx.fillStyle = '#78716C'
-  ctx.strokeStyle = '#A8A29E'
+  ctx.fillStyle = pal.text
+  ctx.strokeStyle = pal.tick
   ctx.font = '9px sans-serif'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'

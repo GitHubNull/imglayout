@@ -1,6 +1,7 @@
 // 参考线绘制（纯函数）。坐标经 useCanvasView 换算，逻辑坐标毫米。
 import type { useCanvasView } from '../../composables/useCanvasView'
 import type { CanvasSpec, Guide, GuideAxis } from '../../types/layout'
+import type { GuidesPalette } from '../../lib/canvasTheme'
 
 type View = ReturnType<typeof useCanvasView>
 
@@ -20,12 +21,6 @@ export interface GuidesDrawState {
   /** 草稿/拖动中的参考线吸附在目标上时品红加粗 */
   draftSnapped?: boolean
 }
-
-const COLOR_NORMAL = '#0EA5E9'
-const COLOR_HOVER = '#0284C7'
-const COLOR_SELECTED = '#F59E0B'
-const COLOR_DRAFT = 'rgba(14, 165, 233, 0.6)'
-const COLOR_SNAPPED = '#D946EF'
 
 function drawOne(
   ctx: CanvasRenderingContext2D,
@@ -62,6 +57,7 @@ function drawLabel(
   axis: GuideAxis,
   posMm: number,
   color: string,
+  pal: GuidesPalette,
 ) {
   const b = c.bleedMm
   const text = `${Math.round((axis === 'x' ? posMm : c.heightMm - posMm) * 10) / 10}mm`
@@ -70,7 +66,7 @@ function drawLabel(
   ctx.save()
   ctx.font = '10px sans-serif'
   const w = ctx.measureText(text).width
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+  ctx.fillStyle = pal.labelBg
   ctx.fillRect(x - 2, y - 10, w + 4, 13)
   ctx.fillStyle = color
   ctx.textBaseline = 'alphabetic'
@@ -83,6 +79,7 @@ export function drawGuides(
   view: View,
   c: CanvasSpec,
   state: GuidesDrawState,
+  pal: GuidesPalette,
 ) {
   const selected = new Set(state.selectedIds)
   for (const g of state.guides) {
@@ -90,23 +87,23 @@ export function drawGuides(
     const isHover = state.hoveredId === g.id
     const snapped = state.draggingId === g.id && !!state.draftSnapped
     const color = snapped
-      ? COLOR_SNAPPED
+      ? pal.snapped
       : isSel
-        ? COLOR_SELECTED
+        ? pal.selected
         : isHover
-          ? COLOR_HOVER
-          : COLOR_NORMAL
+          ? pal.hover
+          : pal.normal
     const width = snapped || isSel || isHover ? 2 : 1
     drawOne(ctx, view, c, g.axis, g.posMm, {
       color,
       width,
       dashed: !!g.locked && !isSel && !isHover,
     })
-    if (isSel || isHover) drawLabel(ctx, view, c, g.axis, g.posMm, color)
+    if (isSel || isHover) drawLabel(ctx, view, c, g.axis, g.posMm, color, pal)
   }
   if (state.draft) {
     drawOne(ctx, view, c, state.draft.axis, state.draft.posMm, {
-      color: state.draftSnapped ? COLOR_SNAPPED : COLOR_DRAFT,
+      color: state.draftSnapped ? pal.snapped : pal.draft,
       width: state.draftSnapped ? 2 : 1,
       dashed: false,
     })

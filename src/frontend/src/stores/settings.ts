@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 const STORAGE_KEY = 'imglayout.settings.v1'
 
 export interface SettingsState {
+  theme: 'dark' | 'light'
   gridVisible: boolean
   gridStepMm: number
   gridSnap: boolean
@@ -13,6 +14,7 @@ export interface SettingsState {
 }
 
 const DEFAULTS: SettingsState = {
+  theme: 'dark',
   gridVisible: true,
   gridStepMm: 5,
   gridSnap: true,

@@ -10,6 +10,7 @@ import { GuidesController, type GuideEditRequest } from './GuidesController'
 import { drawGuides } from './drawGuides'
 import { useSettingsStore } from '../../stores/settings'
 import { drawRulers } from '../../lib/ruler'
+import { canvasPalette, LIGHT_PALETTE, type CanvasPalette } from '../../lib/canvasTheme'
 import type { PhotoItem, RectMm } from '../../types/layout'
 
 const stageEl = ref<HTMLDivElement | null>(null)
@@ -24,6 +25,7 @@ const settings = useSettingsStore()
 const view = props.view
 
 let ctx: CanvasRenderingContext2D | null = null
+let pal: CanvasPalette = LIGHT_PALETTE
 let controller: InteractionController | null = null
 let guidesCtl: GuidesController | null = null
 let stageResize: ReturnType<typeof useStageResize> | null = null
@@ -151,7 +153,7 @@ function drawItem(item: PhotoItem, rect: RectMm) {
     ctx!.drawImage(img, sx, sy, sw, sh, destX, destY, destW, destH)
   } else {
     // 缩略图未就绪：占位灰
-    ctx!.fillStyle = '#D8D8D4'
+    ctx!.fillStyle = pal.thumbPlaceholder
     ctx!.fillRect(dx, dy, dw, dh)
   }
   ctx!.restore()
@@ -181,14 +183,14 @@ function drawSelection(rect: RectMm, primary: boolean) {
   const dw = rect.wMm * s
   const dh = rect.hMm * s
   ctx!.save()
-  ctx!.strokeStyle = primary ? '#3B82F6' : '#60A5FA'
+  ctx!.strokeStyle = primary ? pal.selPrimary : pal.selSecondary
   ctx!.lineWidth = primary ? 1.5 : 1
   ctx!.setLineDash([4, 3])
   ctx!.strokeRect(dx, dy, dw, dh)
   ctx!.setLineDash([])
   if (primary && project.doc.mode === 'free') {
-    ctx!.fillStyle = '#FFFFFF'
-    ctx!.strokeStyle = '#3B82F6'
+    ctx!.fillStyle = pal.handleFill
+    ctx!.strokeStyle = pal.selPrimary
     for (const hx of [dx, dx + dw / 2, dx + dw]) {
       for (const hy of [dy, dy + dh / 2, dy + dh]) {
         const isRotate = hx === dx + dw / 2 && hy === dy
@@ -227,8 +229,9 @@ function draw() {
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
 
+  pal = canvasPalette(settings.theme)
   // 工作台
-  ctx.fillStyle = '#E9E9E6'
+  ctx.fillStyle = pal.workbenchBg
   ctx.fillRect(0, 0, w, h)
 
   const c = project.doc.canvas
@@ -240,7 +243,7 @@ function draw() {
   // 输出画布（含出血）
   ctx.fillStyle = /^#[0-9A-Fa-f]{3,8}$/.test(c.background) ? c.background : '#FFFFFF'
   ctx.fillRect(ox, oy, outW * s, outH * s)
-  ctx.strokeStyle = '#9CA3AF'
+  ctx.strokeStyle = pal.outStroke
   ctx.lineWidth = 1
   ctx.strokeRect(ox - 0.5, oy - 0.5, outW * s + 1, outH * s + 1)
 
@@ -248,7 +251,7 @@ function draw() {
   if (c.bleedMm > 0) {
     const bx = c.bleedMm * s
     ctx.save()
-    ctx.strokeStyle = '#EF4444'
+    ctx.strokeStyle = pal.cropLine
     ctx.setLineDash([6, 4])
     ctx.strokeRect(ox + bx, oy + bx, c.widthMm * s, c.heightMm * s)
     ctx.restore()
@@ -264,7 +267,7 @@ function draw() {
   drawGuidesLayer()
   drawAlignLines()
   drawMarquee()
-  if (settings.rulerVisible) drawRulers(ctx, view, w, h, c)
+  if (settings.rulerVisible) drawRulers(ctx, view, w, h, c, pal.ruler)
 }
 
 /** 参考线：仅自由排版且开启显示时绘制 */
@@ -277,7 +280,7 @@ function drawGuidesLayer() {
     draft: guidesCtl?.draft ?? null,
     draggingId: guidesCtl?.draggingId ?? null,
     draftSnapped: guidesCtl?.draftSnapped ?? false,
-  })
+  }, pal.guides)
 }
 
 /** 自由布局网格：按 settings.gridStepMm 画线，屏幕间距过密时自动跳档 */
@@ -306,7 +309,7 @@ function drawGrid() {
     ctx.moveTo(x0, y)
     ctx.lineTo(x1, y)
   }
-  ctx.strokeStyle = 'rgba(59, 130, 246, 0.14)'
+  ctx.strokeStyle = pal.gridLine
   ctx.lineWidth = 1
   ctx.stroke()
   ctx.restore()
@@ -323,7 +326,7 @@ function drawAlignLines() {
   const y0 = view.screenY(-b, b)
   const y1 = view.screenY(c.heightMm + b, b)
   ctx.save()
-  ctx.strokeStyle = 'rgba(236, 72, 153, 0.85)'
+  ctx.strokeStyle = pal.alignLine
   ctx.lineWidth = 1
   ctx.beginPath()
   for (const v of lines.v) {
@@ -347,11 +350,11 @@ function drawMarquee() {
   const dx = view.screenX(mq.xMm, c.bleedMm)
   const dy = view.screenY(mq.yMm, c.bleedMm)
   ctx.save()
-  ctx.strokeStyle = '#3B82F6'
+  ctx.strokeStyle = pal.marqueeStroke
   ctx.lineWidth = 1
   ctx.setLineDash([4, 3])
   ctx.strokeRect(dx, dy, mq.wMm * view.pxPerMm.value, mq.hMm * view.pxPerMm.value)
-  ctx.fillStyle = 'rgba(59, 130, 246, 0.08)'
+  ctx.fillStyle = pal.marqueeFill
   ctx.fillRect(dx, dy, mq.wMm * view.pxPerMm.value, mq.hMm * view.pxPerMm.value)
   ctx.restore()
 }
