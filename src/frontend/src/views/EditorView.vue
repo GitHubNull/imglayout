@@ -2,7 +2,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, computed } from 'vue'
 import CanvasStage from '../components/canvas/CanvasStage.vue'
 import { useCanvasView } from '../composables/useCanvasView'
 import LayoutPanel from '../components/panels/LayoutPanel.vue'
@@ -43,6 +43,13 @@ function tip(title: string, commandId: string): string {
 }
 
 const stageRef = ref<InstanceType<typeof CanvasStage> | null>(null)
+// ToggleSwitch 是 boolean，store 是 'dark'|'light'，桥接一下
+const darkMode = computed({
+  get: () => settings.theme === 'dark',
+  set: (v: boolean) => {
+    settings.theme = v ? 'dark' : 'light'
+  },
+})
 const exportDialog = ref(false)
 const exporting = ref(false)
 const exportDone = ref(0)
@@ -191,6 +198,8 @@ onBeforeUnmount(() => {
       <Button label="适应" text @click="stageRef?.fitView(); stageRef?.zoomStep(1)" />
       <Button icon="pi pi-plus" text title="放大" @click="stageRef?.zoomStep(1.25)" />
       <span class="zoom">{{ project.doc.items.length }} 张 · {{ project.doc.canvas.widthMm }}×{{ project.doc.canvas.heightMm }}mm</span>
+      <span class="zoom">暗色</span>
+      <ToggleSwitch v-model="darkMode" title="切换亮/暗主题" />
       <Button icon="pi pi-cog" text title="快捷键设置" @click="shortcuts.dialogOpen = true" />
       <Button label="导出…" icon="pi pi-download" @click="startExport" />
     </header>
