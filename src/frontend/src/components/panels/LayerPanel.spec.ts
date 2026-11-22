@@ -2,6 +2,8 @@ import { mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import Aura from '@primeuix/themes/aura'
 import Button from 'primevue/button'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
 import InputText from 'primevue/inputtext'
 import Slider from 'primevue/slider'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
@@ -24,7 +26,7 @@ function mountPanel(pinia: Pinia) {
   return mount(LayerPanel, {
     global: {
       plugins: [[PrimeVue, { theme: { preset: Aura } }], pinia],
-      components: { Button, InputText, Slider },
+      components: { Button, IconField, InputIcon, InputText, Slider },
     },
   })
 }
@@ -102,5 +104,28 @@ describe('LayerPanel（PS 式图层面板）', () => {
     expect(project.doc.items).toHaveLength(3)
     await footer.findAll('button')[1].trigger('click') // 删除图层（选中的是副本）
     expect(project.doc.items).toHaveLength(2)
+  })
+
+  it('搜索框按名称过滤，过滤态禁止拖拽', async () => {
+    const wrapper = mountPanel(pinia)
+    const input = wrapper.find('.layer-search input')
+    expect(input.exists()).toBe(true)
+    await input.setValue('背景')
+    expect(wrapper.findAll('.layer-row')).toHaveLength(1)
+    expect(wrapper.find('.layer-row .name').text()).toBe('背景')
+    expect(wrapper.find('.layer-row').attributes('draggable')).toBe('false')
+    await input.setValue('不存在的名字')
+    expect(wrapper.findAll('.layer-row')).toHaveLength(0)
+    expect(wrapper.find('.empty').text()).toBe('无匹配图层')
+  })
+
+  it('Ctrl+点击多选，再次 Ctrl+点击取消选中', async () => {
+    const wrapper = mountPanel(pinia)
+    const rows = wrapper.findAll('.layer-row')
+    await rows[0].trigger('click', { ctrlKey: true })
+    await rows[1].trigger('click', { ctrlKey: true })
+    expect(project.selectedIds).toHaveLength(2)
+    await rows[0].trigger('click', { ctrlKey: true })
+    expect(project.selectedIds).toHaveLength(1)
   })
 })

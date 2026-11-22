@@ -64,3 +64,13 @@ function bestDelta(candidates: number[], targets: number[]): number {
 export function clampMinSize(rect: RectMm, minMm: number): RectMm {
   return { ...rect, wMm: Math.max(minMm, rect.wMm), hMm: Math.max(minMm, rect.hMm) }
 }
+
+/** 网格吸附：左上角对齐到最近的 gridStepMm 整数倍 */
+export function snapGridTranslate(rect: RectMm, stepMm: number): RectMm {
+  if (stepMm <= 0) return rect
+  return {
+    ...rect,
+    xMm: Math.round(rect.xMm / stepMm) * stepMm,
+    yMm: Math.round(rect.yMm / stepMm) * stepMm,
+  }
+}

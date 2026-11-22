@@ -7,7 +7,14 @@ export interface LayoutDoc {
   mode: LayoutMode
   grid?: GridConfig
   masonry?: MasonryConfig
+  /** 自由布局组合；旧文档无该字段时按空数组处理 */
+  groups?: Group[]
   items: PhotoItem[]
+}
+
+export interface Group {
+  id: string
+  name: string | null
 }
 
 export interface CanvasSpec {
@@ -54,6 +61,8 @@ export interface PhotoItem {
   locked: boolean
   /** 图层自定义名，null 回退文件名 */
   name: string | null
+  /** 所属组合 id，null 表示未组合 */
+  groupId: string | null
 }
 
 export interface RectMm {
@@ -138,6 +147,7 @@ export function newItem(id: string, assetId: string): PhotoItem {
     opacity: 1,
     locked: false,
     name: null,
+    groupId: null,
   }
 }
 

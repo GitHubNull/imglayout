@@ -5,6 +5,8 @@ import { fillOf } from '../../stores/project'
 import { useProjectStore } from '../../stores/project'
 import { setAssetImageListener, useAssetsStore } from '../../stores/assets'
 import { InteractionController, HANDLES } from './InteractionController'
+import { useSettingsStore } from '../../stores/settings'
+import { rulerSteps } from '../../lib/ruler'
 import type { PhotoItem, RectMm } from '../../types/layout'
 
 const stageEl = ref<HTMLDivElement | null>(null)
@@ -14,6 +16,7 @@ const props = defineProps<{ view: ReturnType<typeof useCanvasView> }>()
 
 const project = useProjectStore()
 const assets = useAssetsStore()
+const settings = useSettingsStore()
 // view 由 EditorView 创建并共享，工具栏的缩放读数与画布联动
 const view = props.view
 
@@ -66,7 +69,7 @@ function roundedRectPath(x: number, y: number, w: number, h: number, r: number) 
   ctx!.closePath()
 }
 
-function drawItem(item: PhotoItem, rect: RectMm, index: number) {
+function drawItem(item: PhotoItem, rect: RectMm) {
   const c = project.doc.canvas
   const img = assets.image(item.assetId)
   const s = view.pxPerMm.value
@@ -141,12 +144,14 @@ function drawItem(item: PhotoItem, rect: RectMm, index: number) {
     ctx!.restore()
   }
 
-  if (item.id === project.selectedId) {
-    drawSelection(rect, index)
+  if (item.id === project.selectedItem?.id) {
+    drawSelection(rect, true)
+  } else if (project.selectedIds.includes(item.id)) {
+    drawSelection(rect, false)
   }
 }
 
-function drawSelection(rect: RectMm, _index: number) {
+function drawSelection(rect: RectMm, primary: boolean) {
   const c = project.doc.canvas
   const s = view.pxPerMm.value
   const dx = view.screenX(rect.xMm, c.bleedMm)
@@ -154,12 +159,12 @@ function drawSelection(rect: RectMm, _index: number) {
   const dw = rect.wMm * s
   const dh = rect.hMm * s
   ctx!.save()
-  ctx!.strokeStyle = '#3B82F6'
-  ctx!.lineWidth = 1.5
+  ctx!.strokeStyle = primary ? '#3B82F6' : '#60A5FA'
+  ctx!.lineWidth = primary ? 1.5 : 1
   ctx!.setLineDash([4, 3])
   ctx!.strokeRect(dx, dy, dw, dh)
   ctx!.setLineDash([])
-  if (project.doc.mode === 'free') {
+  if (primary && project.doc.mode === 'free') {
     ctx!.fillStyle = '#FFFFFF'
     ctx!.strokeStyle = '#3B82F6'
     for (const hx of [dx, dx + dw / 2, dx + dw]) {
@@ -230,8 +235,146 @@ function draw() {
   const rects = project.rects
   project.doc.items.forEach((item, i) => {
     const rect = rects[i]
-    if (item.visible && rect) drawItem(item, rect, i)
+    if (item.visible && rect) drawItem(item, rect)
   })
+
+  drawGrid()
+  drawAxisHighlight()
+  drawMarquee()
+  drawRulers()
+}
+
+/** 自由布局网格：按 settings.gridStepMm 画线，屏幕间距过密时自动跳档 */
+function drawGrid() {
+  if (project.doc.mode !== 'free' || !settings.gridVisible || !ctx) return
+  const c = project.doc.canvas
+  const s = view.pxPerMm.value
+  let step = settings.gridStepMm
+  while (step * s < 8 && step < 100) {
+    step = step >= 10 ? step + 10 : step === 5 ? 10 : step === 2 ? 5 : 2
+  }
+  const b = c.bleedMm
+  const x0 = view.screenX(-b, b)
+  const y0 = view.screenY(-b, b)
+  const x1 = view.screenX(c.widthMm + b, b)
+  const y1 = view.screenY(c.heightMm + b, b)
+  ctx.save()
+  ctx.beginPath()
+  for (let v = Math.ceil(-b / step) * step; v <= c.widthMm + b + 1e-6; v += step) {
+    const x = view.screenX(v, b)
+    ctx.moveTo(x, y0)
+    ctx.lineTo(x, y1)
+  }
+  for (let v = Math.ceil(-b / step) * step; v <= c.heightMm + b + 1e-6; v += step) {
+    const y = view.screenY(v, b)
+    ctx.moveTo(x0, y)
+    ctx.lineTo(x1, y)
+  }
+  ctx.strokeStyle = 'rgba(59, 130, 246, 0.14)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.restore()
+}
+
+/** 拖动经过画布水平/垂直中轴时的高亮引导线 */
+function drawAxisHighlight() {
+  const hl = controller?.axisHighlight
+  if (!hl || !ctx) return
+  const c = project.doc.canvas
+  const b = c.bleedMm
+  const x0 = view.screenX(-b, b)
+  const x1 = view.screenX(c.widthMm + b, b)
+  const y0 = view.screenY(-b, b)
+  const y1 = view.screenY(c.heightMm + b, b)
+  ctx.save()
+  ctx.strokeStyle = 'rgba(59, 130, 246, 0.65)'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  if (hl === 'v') {
+    const x = view.screenX(c.widthMm / 2, b)
+    ctx.moveTo(x, y0)
+    ctx.lineTo(x, y1)
+  } else {
+    const y = view.screenY(c.heightMm / 2, b)
+    ctx.moveTo(x0, y)
+    ctx.lineTo(x1, y)
+  }
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawMarquee() {
+  const mq = controller?.marqueeRect
+  if (!mq || !ctx) return
+  const c = project.doc.canvas
+  const dx = view.screenX(mq.xMm, c.bleedMm)
+  const dy = view.screenY(mq.yMm, c.bleedMm)
+  ctx.save()
+  ctx.strokeStyle = '#3B82F6'
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 3])
+  ctx.strokeRect(dx, dy, mq.wMm * view.pxPerMm.value, mq.hMm * view.pxPerMm.value)
+  ctx.fillStyle = 'rgba(59, 130, 246, 0.08)'
+  ctx.fillRect(dx, dy, mq.wMm * view.pxPerMm.value, mq.hMm * view.pxPerMm.value)
+  ctx.restore()
+}
+
+/** 标尺：X 轴在底部、Y 轴在左侧，原点 = 成品左下角（Y 从底部向上读数） */
+function drawRulers() {
+  const canvas = canvasEl.value
+  if (!settings.rulerVisible || !canvas || !ctx) return
+  const w = canvas.clientWidth
+  const h = canvas.clientHeight
+  const c = project.doc.canvas
+  const s = view.pxPerMm.value
+  const b = c.bleedMm
+  const R = 20
+  const step = rulerSteps(s)
+
+  ctx.save()
+  ctx.fillStyle = 'rgba(250, 250, 249, 0.94)'
+  ctx.fillRect(0, 0, R, h)
+  ctx.fillRect(0, h - R, w, R)
+  ctx.strokeStyle = '#D6D3D1'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(R + 0.5, 0)
+  ctx.lineTo(R + 0.5, h)
+  ctx.moveTo(0, h - R + 0.5)
+  ctx.lineTo(w, h - R + 0.5)
+  ctx.stroke()
+
+  ctx.fillStyle = '#78716C'
+  ctx.strokeStyle = '#A8A29E'
+  ctx.font = '9px sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+
+  // X 轴：标签 = 距成品左缘的毫米值
+  for (let v = Math.ceil(-b / step) * step; v <= c.widthMm + b + 1e-6; v += step) {
+    const x = Math.round(view.screenX(v, b)) + 0.5
+    ctx.beginPath()
+    ctx.moveTo(x, h - R)
+    ctx.lineTo(x, h - R + (Math.abs(v % (step * 5)) < 1e-6 ? 7 : 4))
+    ctx.stroke()
+    if (v >= -1e-6 && v <= c.widthMm + 1e-6) {
+      ctx.fillText(String(Math.round(v * 10) / 10), x + 2, h - R + 11)
+    }
+  }
+
+  // Y 轴：标签 = 距成品底缘的毫米值（= heightMm − mmY）
+  ctx.textAlign = 'right'
+  for (let v = Math.ceil(-b / step) * step; v <= c.heightMm + b + 1e-6; v += step) {
+    const y = Math.round(view.screenY(v, b)) + 0.5
+    ctx.beginPath()
+    ctx.moveTo(R, y)
+    ctx.lineTo(R - (Math.abs(v % (step * 5)) < 1e-6 ? 7 : 4), y)
+    ctx.stroke()
+    if (v >= -1e-6 && v <= c.heightMm + 1e-6) {
+      ctx.fillText(String(Math.round((c.heightMm - v) * 10) / 10), R - 9, y + 3)
+    }
+  }
+  ctx.restore()
 }
 
 function onKeyDown(e: KeyboardEvent) {
@@ -240,7 +383,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (e.key === 'Delete' || e.key === 'Backspace') {
     controller?.deleteSelected()
   } else if (e.key === 'Escape') {
-    project.select(null)
+    project.clearSelection()
     scheduleDraw()
   } else if (e.key === 'ArrowLeft' && e.shiftKey) {
     controller?.nudgeSelected(-1, 0)
@@ -264,7 +407,8 @@ onMounted(() => {
   setAssetImageListener(scheduleDraw)
   window.addEventListener('keydown', onKeyDown)
   watch(() => project.doc, scheduleDraw, { deep: true })
-  watch(() => project.selectedId, scheduleDraw)
+  watch(() => project.selectedIds, scheduleDraw, { deep: true })
+  watch(() => settings.$state, scheduleDraw, { deep: true })
   fitView()
   scheduleDraw()
 })

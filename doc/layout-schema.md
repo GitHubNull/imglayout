@@ -19,6 +19,7 @@
   "masonry": { "columns": 3, "gapMm": 4, "outerMm": 8 },
   // grid/masonry 字段仅在对应 mode 下存在；free 模式无布局配置
   // masonry 无 fill：框高由照片（裁剪后）宽高比决定，照片等比填满自己的框
+  "groups": [ { "id": "group-uuid", "name": null } ],  // 自由布局组合；旧文档可无此字段（默认 []）
   "items": [ /* PhotoItem[]，数组顺序 = free 模式层级（底→顶） */ ]
 }
 ```
@@ -42,7 +43,8 @@
   "visible": true,                    // 隐藏层：预览不绘制、导出跳过、画布不可点选
   "opacity": 1,                       // 0–1，整层（含边框）与背景混合的比例
   "locked": false,                    // 锁定层：画布上禁止移动/缩放/旋转/微调/删除
-  "name": null                        // 图层自定义名；null 回退为文件名
+  "name": null,                       // 图层自定义名；null 回退为文件名
+  "groupId": null                     // 所属组合 id；删除任一会连带删除全组
 }
 ```
 
@@ -51,6 +53,7 @@
 - **visible**：隐藏层仍参与 grid/masonry 排版占位（与 PS 一致），只是不绘制、不导出。
 - **opacity**：导出时把该层合成结果的 alpha 通道按比例缩放后再 blend 到画布；预览用 canvas `globalAlpha` 近似。
 - **locked**：只约束画布交互（InteractionController），图层面板仍可重命名/删除/复制/调不透明度。
+- **groups / groupId**：组合仅影响画布交互（组内成员联动移动、连带删除）；渲染与导出忽略组。旧项目文件无这两个字段时按空组合处理。
 
 ## AssetEntry（导入照片登记表，不入 LayoutDoc）
 

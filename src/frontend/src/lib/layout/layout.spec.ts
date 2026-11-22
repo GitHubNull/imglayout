@@ -13,7 +13,7 @@ import {
 } from '../../types/layout'
 import { layoutGrid } from './grid'
 import { layoutMasonry } from './masonry'
-import { clampMinSize, snapRectTranslate, snapTargets, snapValue } from './free'
+import { clampMinSize, snapGridTranslate, snapRectTranslate, snapTargets, snapValue } from './free'
 
 function canvas(w: number, h: number): CanvasSpec {
   return { ...emptyDoc().canvas, widthMm: w, heightMm: h }
@@ -135,5 +135,12 @@ describe('free 吸附对拍', () => {
   it('clampMinSize 保位置', () => {
     const r = clampMinSize({ xMm: 5, yMm: 5, wMm: 0, hMm: -3 }, 1)
     expect(r).toEqual({ xMm: 5, yMm: 5, wMm: 1, hMm: 1 })
+  })
+
+  it('snapGridTranslate 左上角对齐到最近网格点', () => {
+    const rect: RectMm = { xMm: 12.6, yMm: 3.2, wMm: 20, hMm: 20 }
+    expect(snapGridTranslate(rect, 5)).toEqual({ xMm: 15, yMm: 5, wMm: 20, hMm: 20 })
+    expect(snapGridTranslate(rect, 0)).toBe(rect)
+    expect(snapGridTranslate({ ...rect, xMm: 12.4 }, 5).xMm).toBe(10)
   })
 })

@@ -1,8 +1,14 @@
-// 画布交互状态机：平移、缩放（滚轮）、选中、拖动、缩放手柄、旋转手柄。
+// 画布交互状态机：平移（中键/右键/空格+左键）、缩放（滚轮）、单选/多选、
+// 框选、拖动（含组合联动）、缩放手柄、旋转手柄、吸附（边缘 + 网格）。
 // 坐标换算全部经 useCanvasView，逻辑坐标一律毫米。
-import { snapRectTranslate, snapTargets } from '../../lib/layout/free'
+import {
+  snapGridTranslate,
+  snapRectTranslate,
+  snapTargets,
+} from '../../lib/layout/free'
 import type { RectMm } from '../../types/layout'
 import { useProjectStore } from '../../stores/project'
+import { useSettingsStore } from '../../stores/settings'
 import type { useCanvasView } from '../../composables/useCanvasView'
 
 export type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
@@ -13,9 +19,19 @@ const MIN_SIZE_MM = 5
 
 type DragState =
   | { kind: 'pan'; lastX: number; lastY: number }
-  | { kind: 'move'; itemId: string; startRect: RectMm; grabDxMm: number; grabDyMm: number; moved: boolean }
+  | {
+      kind: 'move'
+      itemId: string
+      startRect: RectMm
+      /** 联动移动的成员（同组 + 其余选中项），不含主拖动项 */
+      groupRects: { id: string; rect: RectMm }[]
+      grabDxMm: number
+      grabDyMm: number
+      moved: boolean
+    }
   | { kind: 'resize'; itemId: string; handle: HandleId; startRect: RectMm; startXmm: number; startYmm: number; moved: boolean }
   | { kind: 'rotate'; itemId: string; centerXmm: number; centerYmm: number; moved: boolean }
+  | { kind: 'marquee'; startXmm: number; startYmm: number; curXmm: number; curYmm: number }
   | null
 
 interface Deps {
@@ -28,6 +44,8 @@ export class InteractionController {
   private deps: Deps
   private state: DragState = null
   spaceDown = false
+  /** 拖动经过画布中轴时的高亮：'v'=垂直中线（水平方向居中），'h'=水平中线 */
+  axisHighlight: 'h' | 'v' | null = null
   private onKeyDown: (e: KeyboardEvent) => void
   private onKeyUp: (e: KeyboardEvent) => void
 
@@ -36,11 +54,15 @@ export class InteractionController {
     this.onKeyDown = (e) => {
       if (e.code === 'Space') {
         this.spaceDown = true
+        if (this.state?.kind !== 'pan') deps.stage.style.cursor = 'grab'
         e.preventDefault()
       }
     }
     this.onKeyUp = (e) => {
-      if (e.code === 'Space') this.spaceDown = false
+      if (e.code === 'Space') {
+        this.spaceDown = false
+        if (this.state?.kind !== 'pan') deps.stage.style.cursor = ''
+      }
     }
   }
 
@@ -51,6 +73,7 @@ export class InteractionController {
     el.addEventListener('pointerup', this.handlePointerUp)
     el.addEventListener('pointercancel', this.handlePointerUp)
     el.addEventListener('wheel', this.handleWheel, { passive: false })
+    el.addEventListener('contextmenu', this.handleContextMenu)
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
   }
@@ -62,22 +85,41 @@ export class InteractionController {
     el.removeEventListener('pointerup', this.handlePointerUp)
     el.removeEventListener('pointercancel', this.handlePointerUp)
     el.removeEventListener('wheel', this.handleWheel)
+    el.removeEventListener('contextmenu', this.handleContextMenu)
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
   }
 
+  /** 框选矩形（毫米，已归一化）；未在框选时返回 null */
+  get marqueeRect(): RectMm | null {
+    if (this.state?.kind !== 'marquee') return null
+    const { startXmm, startYmm, curXmm, curYmm } = this.state
+    return {
+      xMm: Math.min(startXmm, curXmm),
+      yMm: Math.min(startYmm, curYmm),
+      wMm: Math.abs(curXmm - startXmm),
+      hMm: Math.abs(curYmm - startYmm),
+    }
+  }
+
   nudgeSelected(dxMm: number, dyMm: number) {
     const project = useProjectStore()
-    const item = project.selectedItem
-    if (!item || item.locked || project.doc.mode !== 'free') return
-    project.updateItemRect(item.id, { ...item.rect, xMm: item.rect.xMm + dxMm, yMm: item.rect.yMm + dyMm })
+    if (project.doc.mode !== 'free') return
+    for (const item of project.selectedItems) {
+      if (item.locked) continue
+      project.updateItemRect(item.id, {
+        ...item.rect,
+        xMm: item.rect.xMm + dxMm,
+        yMm: item.rect.yMm + dyMm,
+      })
+    }
     this.deps.redraw()
   }
 
   deleteSelected() {
     const project = useProjectStore()
-    const item = project.selectedItem
-    if (item && !item.locked && project.selectedId) project.removeItem(project.selectedId)
+    const ids = project.selectedItems.filter((i) => !i.locked).map((i) => i.id)
+    if (ids.length) project.removeItems(ids)
   }
 
   private bleed(): number {
@@ -96,9 +138,8 @@ export class InteractionController {
 
   private handleAt(pxX: number, pxY: number): { handle: HandleId; item: RectMm; itemId: string } | null {
     const project = useProjectStore()
-    if (project.doc.mode !== 'free' || !project.selectedId) return null
     const item = project.selectedItem
-    if (!item) return null
+    if (project.doc.mode !== 'free' || !item) return null
     const view = this.deps.view
     const b = this.bleed()
     const cx = view.screenX(item.rect.xMm + item.rect.wMm / 2, b)
@@ -145,6 +186,11 @@ export class InteractionController {
     return null
   }
 
+  private handleContextMenu = (e: Event) => {
+    // 右键留给画布平移，屏蔽系统菜单
+    e.preventDefault()
+  }
+
   private handlePointerDown = (e: PointerEvent) => {
     const el = this.deps.stage
     el.setPointerCapture(e.pointerId)
@@ -153,8 +199,9 @@ export class InteractionController {
     const pxY = e.clientY - rect.top
     const project = useProjectStore()
 
-    if (e.button === 1 || (e.button === 0 && this.spaceDown)) {
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && this.spaceDown)) {
       this.state = { kind: 'pan', lastX: e.clientX, lastY: e.clientY }
+      el.style.cursor = 'grabbing'
       e.preventDefault()
       return
     }
@@ -188,6 +235,20 @@ export class InteractionController {
 
     const mm = this.toMm(e)
     const itemId = this.itemAt(mm.x, mm.y)
+
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      if (itemId) project.toggleSelect(itemId)
+      this.deps.redraw()
+      return
+    }
+
+    if (itemId && project.selectedIds.includes(itemId) && project.selectedIds.length > 1) {
+      // 点在已多选的成员上：保持选择，拖动整组
+      this.startMove(project, itemId, mm)
+      this.deps.redraw()
+      return
+    }
+
     project.select(itemId)
     if (itemId && project.doc.mode === 'free') {
       const item = project.doc.items.find((i) => i.id === itemId)!
@@ -195,16 +256,39 @@ export class InteractionController {
         this.deps.redraw()
         return
       }
-      this.state = {
-        kind: 'move',
-        itemId,
-        startRect: { ...item.rect },
-        grabDxMm: mm.x - item.rect.xMm,
-        grabDyMm: mm.y - item.rect.yMm,
-        moved: false,
-      }
+      this.startMove(project, itemId, mm)
+    } else if (!itemId) {
+      this.state = { kind: 'marquee', startXmm: mm.x, startYmm: mm.y, curXmm: mm.x, curYmm: mm.y }
     }
     this.deps.redraw()
+  }
+
+  private startMove(
+    project: ReturnType<typeof useProjectStore>,
+    itemId: string,
+    mm: { x: number; y: number },
+  ) {
+    const item = project.doc.items.find((i) => i.id === itemId)!
+    const selected = new Set(project.selectedIds)
+    const gid = item.groupId
+    // 联动成员：同组合的其他未锁定成员 + 其余已选中未锁定项
+    const groupRects = project.doc.items
+      .filter(
+        (i) =>
+          i.id !== itemId &&
+          !i.locked &&
+          ((gid != null && i.groupId === gid) || selected.has(i.id)),
+      )
+      .map((i) => ({ id: i.id, rect: { ...i.rect } }))
+    this.state = {
+      kind: 'move',
+      itemId,
+      startRect: { ...item.rect },
+      groupRects,
+      grabDxMm: mm.x - item.rect.xMm,
+      grabDyMm: mm.y - item.rect.yMm,
+      moved: false,
+    }
   }
 
   private isRotateHandle(pxX: number, pxY: number): boolean {
@@ -228,18 +312,51 @@ export class InteractionController {
       this.deps.view.panBy(e.clientX - state.lastX, e.clientY - state.lastY)
       state.lastX = e.clientX
       state.lastY = e.clientY
+    } else if (state.kind === 'marquee') {
+      state.curXmm = mm.x
+      state.curYmm = mm.y
     } else if (state.kind === 'move') {
       const draft: RectMm = {
         ...state.startRect,
         xMm: mm.x - state.grabDxMm,
         yMm: mm.y - state.grabDyMm,
       }
-      const others = project.doc.items
-        .filter((i) => i.id !== state.itemId)
-        .map((i) => i.rect)
-      const snapped = snapRectTranslate(draft, snapTargets(project.doc.canvas, others), snapTargets(project.doc.canvas, others))
+      const settings = useSettingsStore()
+      const movingIds = new Set([
+        state.itemId,
+        ...state.groupRects.map((g) => g.id),
+      ])
+      let snapped = draft
+      if (settings.edgeSnap) {
+        const others = project.doc.items
+          .filter((i) => !movingIds.has(i.id))
+          .map((i) => i.rect)
+        const targets = snapTargets(project.doc.canvas, others)
+        snapped = snapRectTranslate(draft, targets, targets)
+      }
+      if (settings.gridSnap) {
+        const grid = snapGridTranslate(snapped, settings.gridStepMm)
+        // 两路吸附逐轴取更近者
+        snapped = {
+          ...snapped,
+          xMm: Math.abs(grid.xMm - draft.xMm) < Math.abs(snapped.xMm - draft.xMm) ? grid.xMm : snapped.xMm,
+          yMm: Math.abs(grid.yMm - draft.yMm) < Math.abs(snapped.yMm - draft.yMm) ? grid.yMm : snapped.yMm,
+        }
+      }
+      const dx = snapped.xMm - state.startRect.xMm
+      const dy = snapped.yMm - state.startRect.yMm
       project.updateItemRect(state.itemId, snapped)
+      for (const g of state.groupRects) {
+        project.updateItemRect(g.id, { ...g.rect, xMm: g.rect.xMm + dx, yMm: g.rect.yMm + dy })
+      }
       state.moved = true
+      // 中轴高亮：主拖动项中心落在画布中线上时点亮对应轴线
+      this.axisHighlight = null
+      const c = project.doc.canvas
+      const cx = snapped.xMm + snapped.wMm / 2
+      const cy = snapped.yMm + snapped.hMm / 2
+      if (Math.abs(cx - c.widthMm / 2) < 1e-6) this.axisHighlight = 'v'
+      if (Math.abs(cy - c.heightMm / 2) < 1e-6) this.axisHighlight = 'h'
     } else if (state.kind === 'resize') {
       project.updateItemRect(state.itemId, this.resizedRect(state, mm.x, mm.y))
       state.moved = true
@@ -281,11 +398,40 @@ export class InteractionController {
     return { xMm: x, yMm: y, wMm: w, hMm: h }
   }
 
-  private handlePointerUp = () => {
-    if (this.state && 'moved' in this.state && this.state.moved) {
+  private handlePointerUp = (e: PointerEvent) => {
+    const state = this.state
+    if (state?.kind === 'pan') {
+      this.deps.stage.style.cursor = this.spaceDown ? 'grab' : ''
+    } else if (state?.kind === 'marquee') {
+      const project = useProjectStore()
+      const { startXmm, startYmm, curXmm, curYmm } = state
+      const x0 = Math.min(startXmm, curXmm)
+      const y0 = Math.min(startYmm, curYmm)
+      const x1 = Math.max(startXmm, curXmm)
+      const y1 = Math.max(startYmm, curYmm)
+      const rects = project.rects
+      const hit: string[] = []
+      project.doc.items.forEach((item, i) => {
+        const r = rects[i]
+        if (!r || !item.visible) return
+        const cx = r.xMm + r.wMm / 2
+        const cy = r.yMm + r.hMm / 2
+        if (cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1) hit.push(item.id)
+      })
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        for (const id of hit) {
+          if (!project.selectedIds.includes(id)) project.selectedIds.push(id)
+        }
+      } else {
+        project.selectedIds = hit
+      }
+    }
+    if (state && 'moved' in state && state.moved) {
       useProjectStore().snapshot()
     }
+    this.axisHighlight = null
     this.state = null
+    this.deps.redraw()
   }
 
   private handleWheel = (e: WheelEvent) => {

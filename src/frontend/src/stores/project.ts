@@ -16,6 +16,11 @@ import {
 } from '../types/layout'
 import { layoutGrid } from '../lib/layout/grid'
 import { layoutMasonry, type MasonryInput } from '../lib/layout/masonry'
+import {
+  alignRect,
+  distributeRects,
+  type AlignOp,
+} from '../lib/layout/align'
 import { useAssetsStore } from './assets'
 
 const HISTORY_LIMIT = 50
@@ -46,7 +51,7 @@ export function fillOf(doc: LayoutDoc): FillMode {
 export const useProjectStore = defineStore('project', {
   state: () => ({
     doc: emptyDoc(),
-    selectedId: null as string | null,
+    selectedIds: [] as string[],
     undoStack: [] as string[],
     redoStack: [] as string[],
   }),
@@ -60,8 +65,15 @@ export const useProjectStore = defineStore('project', {
       }
       return computeRects(state.doc, sizes)
     },
-    selectedItem(state): PhotoItem | null {
-      return state.doc.items.find((i) => i.id === state.selectedId) ?? null
+    /** 全部选中项（按 doc.items 顺序）；selectedIds 里已删除的 id 自动被过滤 */
+    selectedItems(state): PhotoItem[] {
+      const set = new Set(state.selectedIds)
+      return state.doc.items.filter((i) => set.has(i.id))
+    },
+    /** 主选中项 = 选中列表最后一位（最后点选/最新加入者） */
+    selectedItem(): PhotoItem | null {
+      const items = this.selectedItems
+      return items.length ? items[items.length - 1] : null
     },
   },
   actions: {
@@ -75,15 +87,30 @@ export const useProjectStore = defineStore('project', {
       if (prev == null) return
       this.redoStack.push(JSON.stringify(this.doc))
       this.doc = JSON.parse(prev)
+      this.pruneSelection()
     },
     redo() {
       const next = this.redoStack.pop()
       if (next == null) return
       this.undoStack.push(JSON.stringify(this.doc))
       this.doc = JSON.parse(next)
+      this.pruneSelection()
+    },
+    /** 清掉 selectedIds 中已不在文档里的 id（undo/redo/删除后调用） */
+    pruneSelection() {
+      const alive = new Set(this.doc.items.map((i) => i.id))
+      this.selectedIds = this.selectedIds.filter((id) => alive.has(id))
     },
     select(id: string | null) {
-      this.selectedId = id
+      this.selectedIds = id ? [id] : []
+    },
+    toggleSelect(id: string) {
+      const idx = this.selectedIds.indexOf(id)
+      if (idx >= 0) this.selectedIds.splice(idx, 1)
+      else this.selectedIds.push(id)
+    },
+    clearSelection() {
+      this.selectedIds = []
     },
     setMode(mode: LayoutMode) {
       if (this.doc.mode === mode) return
@@ -110,6 +137,7 @@ export const useProjectStore = defineStore('project', {
       if (entries.length === 0) return
       this.snapshot()
       let cascade = this.doc.items.length % 6
+      const added: string[] = []
       for (const entry of entries) {
         const item = newItem(crypto.randomUUID(), entry.assetId)
         if (this.doc.mode === 'free') {
@@ -117,15 +145,27 @@ export const useProjectStore = defineStore('project', {
           cascade++
         }
         this.doc.items.push(item)
-        this.selectedId = item.id
+        added.push(item.id)
       }
+      this.selectedIds = added
     },
     removeItem(id: string) {
-      const idx = this.doc.items.findIndex((i) => i.id === id)
-      if (idx < 0) return
+      this.removeItems([id])
+    },
+    removeItems(ids: string[]) {
+      const dead = new Set(ids)
+      const targets = this.doc.items.filter((i) => dead.has(i.id))
+      if (targets.length === 0) return
       this.snapshot()
-      this.doc.items.splice(idx, 1)
-      if (this.selectedId === id) this.selectedId = null
+      // 组合连带删除：删除成员时同组其余成员一并删除
+      const groupIds = new Set(
+        targets.map((i) => i.groupId).filter((g): g is string => g != null),
+      )
+      this.doc.items = this.doc.items.filter(
+        (i) => !dead.has(i.id) && (i.groupId == null || !groupIds.has(i.groupId)),
+      )
+      this.doc.groups = (this.doc.groups ?? []).filter((g) => !groupIds.has(g.id))
+      this.pruneSelection()
     },
     updateItem(id: string, patch: Partial<PhotoItem>) {
       const target = this.doc.items.find((i) => i.id === id)
@@ -153,21 +193,72 @@ export const useProjectStore = defineStore('project', {
       this.doc.items.splice(to, 0, moved)
     },
     duplicateItem(id: string) {
-      const idx = this.doc.items.findIndex((i) => i.id === id)
-      if (idx < 0) return
+      this.duplicateItems([id])
+    },
+    duplicateItems(ids: string[]) {
+      const copies: string[] = []
+      ids.forEach((id, n) => {
+        const idx = this.doc.items.findIndex((i) => i.id === id)
+        if (idx < 0) return
+        if (copies.length === 0) this.snapshot()
+        const copy: PhotoItem = JSON.parse(JSON.stringify(this.doc.items[idx]))
+        copy.id = crypto.randomUUID()
+        copy.name = copy.name ? `${copy.name} 副本` : null
+        copy.groupId = null
+        if (this.doc.mode === 'free') {
+          const off = 8 * (n + 1)
+          copy.rect = { ...copy.rect, xMm: copy.rect.xMm + off, yMm: copy.rect.yMm + off }
+        }
+        this.doc.items.splice(idx + 1, 0, copy)
+        copies.push(copy.id)
+      })
+      if (copies.length) this.selectedIds = copies
+    },
+    groupSelection() {
+      const members = this.selectedItems.filter((i) => !i.locked && i.groupId == null)
+      if (members.length < 2) return
       this.snapshot()
-      const copy: PhotoItem = JSON.parse(JSON.stringify(this.doc.items[idx]))
-      copy.id = crypto.randomUUID()
-      copy.name = copy.name ? `${copy.name} 副本` : null
-      if (this.doc.mode === 'free') {
-        copy.rect = { ...copy.rect, xMm: copy.rect.xMm + 8, yMm: copy.rect.yMm + 8 }
+      const gid = crypto.randomUUID()
+      this.doc.groups = [...(this.doc.groups ?? []), { id: gid, name: null }]
+      for (const m of members) m.groupId = gid
+    },
+    ungroupSelection() {
+      const groups = new Set(
+        this.selectedItems.map((i) => i.groupId).filter((g): g is string => g != null),
+      )
+      if (groups.size === 0) return
+      this.snapshot()
+      for (const item of this.doc.items) {
+        if (item.groupId != null && groups.has(item.groupId)) item.groupId = null
       }
-      this.doc.items.splice(idx + 1, 0, copy)
-      this.selectedId = copy.id
+      this.doc.groups = (this.doc.groups ?? []).filter((g) => !groups.has(g.id))
+    },
+    /**
+     * 对齐/分布：仅自由布局；refRect 由调用方按 PS 口径给出
+     * （多选=选区包围盒，单选/强制=画布）。锁定项不动。
+     */
+    alignSelection(mode: AlignOp, refRect: RectMm) {
+      if (this.doc.mode !== 'free') return
+      const targets = this.selectedItems.filter((i) => !i.locked)
+      if (targets.length === 0) return
+      const isDistribute = mode === 'distribute-h' || mode === 'distribute-v'
+      if (isDistribute && targets.length < 3) return
+      this.snapshot()
+      if (mode === 'distribute-h' || mode === 'distribute-v') {
+        const next = distributeRects(targets, mode === 'distribute-h' ? 'h' : 'v', refRect)
+        for (const t of targets) {
+          const rect = next.get(t.id)
+          if (rect) t.rect = rect
+        }
+      } else {
+        for (const t of targets) {
+          t.rect = alignRect(t.rect, mode, refRect)
+        }
+      }
     },
     replaceDoc(doc: LayoutDoc) {
       this.doc = doc
-      this.selectedId = null
+      this.selectedIds = []
       this.undoStack = []
       this.redoStack = []
     },

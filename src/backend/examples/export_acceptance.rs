@@ -103,6 +103,7 @@ fn build_doc(preset_id: &str, tile_paths: &[String]) -> (LayoutDoc, HashMap<Stri
                 fill: FillMode::Cover,
             }),
             masonry: None,
+            groups: vec![],
             items,
         },
         assets,

@@ -86,6 +86,7 @@ fn main() {
             fill: FillMode::Cover,
         }),
         masonry: None,
+        groups: vec![],
         items,
     };
 

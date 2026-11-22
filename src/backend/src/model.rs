@@ -12,7 +12,18 @@ pub struct LayoutDoc {
     pub mode: LayoutMode,
     pub grid: Option<GridConfig>,
     pub masonry: Option<MasonryConfig>,
+    /// 自由布局组合；旧文档无该字段时按空数组处理。
+    #[serde(default)]
+    pub groups: Vec<Group>,
     pub items: Vec<PhotoItem>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Group {
+    pub id: String,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 fn default_version() -> u32 {
@@ -99,6 +110,9 @@ pub struct PhotoItem {
     /// 图层自定义名；None 回退为文件名。
     #[serde(default)]
     pub name: Option<String>,
+    /// 所属组合 id；None 表示未组合。
+    #[serde(default)]
+    pub group_id: Option<String>,
 }
 
 impl Default for PhotoItem {
@@ -117,6 +131,7 @@ impl Default for PhotoItem {
             opacity: 1.0,
             locked: false,
             name: None,
+            group_id: None,
         }
     }
 }
@@ -232,11 +247,24 @@ mod tests {
             mode: LayoutMode::Grid,
             grid: None,
             masonry: None,
+            groups: vec![],
             items: vec![],
         };
         let json = serde_json::to_value(&doc).unwrap();
         assert!(json["canvas"]["widthMm"].is_number());
         assert!(json["canvas"]["bleedMm"].is_number());
+    }
+
+    #[test]
+    fn legacy_doc_without_groups_field() {
+        // 旧项目文件没有 groups / groupId 字段：反序列化须成功且按空组合处理
+        let doc: LayoutDoc = serde_json::from_str(
+            r##"{"version":1,"canvas":{"widthMm":297,"heightMm":210,"dpi":300,"background":"#FFFFFF","bleedMm":0},
+                "mode":"free","items":[{"id":"a","assetId":"b","rect":{"xMm":0,"yMm":0,"wMm":10,"hMm":10}}]}"##,
+        )
+        .unwrap();
+        assert!(doc.groups.is_empty());
+        assert_eq!(doc.items[0].group_id, None);
     }
 
     #[test]

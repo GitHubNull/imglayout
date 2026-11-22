@@ -8,7 +8,16 @@ const project = useProjectStore()
 const assets = useAssetsStore()
 
 // PS 图层语义：列表顶部 = 最顶层 = items 数组末尾
-const layers = computed(() => [...project.doc.items].reverse())
+const allLayers = computed(() => [...project.doc.items].reverse())
+
+// ---- 搜索过滤 ----
+const query = ref('')
+const layers = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!q) return allLayers.value
+  return allLayers.value.filter((item) => nameOf(item).toLowerCase().includes(q))
+})
+const filterActive = computed(() => query.value.trim().length > 0)
 
 function nameOf(item: PhotoItem): string {
   if (item.name) return item.name
@@ -60,19 +69,20 @@ function cancelRename() {
   editingId.value = null
 }
 
-// ---- 拖拽排序（HTML5 DnD） ----
+// ---- 拖拽排序（HTML5 DnD）；搜索过滤态下禁用 ----
 const dragId = ref<string | null>(null)
 /** 插入到该显示行之前；等于 layers.length 表示插到最底 */
 const dropPos = ref<number | null>(null)
 
 function onDragStart(item: PhotoItem, e: DragEvent) {
+  if (filterActive.value) return
   dragId.value = item.id
   e.dataTransfer?.setData('text/plain', item.id)
   if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
 }
 
 function onDragOver(idx: number, e: DragEvent) {
-  if (!dragId.value) return
+  if (!dragId.value || filterActive.value) return
   e.preventDefault()
   const row = (e.currentTarget as HTMLElement).getBoundingClientRect()
   const before = e.clientY < row.top + row.height / 2
@@ -81,7 +91,7 @@ function onDragOver(idx: number, e: DragEvent) {
 }
 
 function onTailDragOver(e: DragEvent) {
-  if (!dragId.value) return
+  if (!dragId.value || filterActive.value) return
   e.preventDefault()
   dropPos.value = layers.value.length
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
@@ -89,6 +99,7 @@ function onTailDragOver(e: DragEvent) {
 
 function onDrop(e: DragEvent) {
   e.preventDefault()
+  if (filterActive.value) return
   const id = dragId.value
   const pos = dropPos.value
   dragId.value = null
@@ -107,19 +118,36 @@ function isDropBefore(idx: number): boolean {
   return dragId.value !== null && dropPos.value === idx
 }
 
+function onRowClick(item: PhotoItem, e: MouseEvent) {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) project.toggleSelect(item.id)
+  else project.select(item.id)
+}
+
 const selected = computed(() => project.selectedItem)
+const selectedSet = computed(() => new Set(project.selectedIds))
 </script>
 
 <template>
   <div class="layer-panel">
+    <div class="layer-search">
+      <IconField>
+        <InputIcon class="pi pi-search" />
+        <InputText v-model="query" placeholder="搜索图层" size="small" class="w-full" />
+      </IconField>
+    </div>
     <div v-if="layers.length" class="layer-list">
       <div
         v-for="(item, idx) in layers"
         :key="item.id"
         class="layer-row"
-        :class="{ active: item.id === project.selectedId, hidden: !item.visible, 'drop-before': isDropBefore(idx) }"
-        draggable="true"
-        @click="project.select(item.id)"
+        :class="{
+          active: selectedSet.has(item.id),
+          primary: item.id === project.selectedItem?.id,
+          hidden: !item.visible,
+          'drop-before': isDropBefore(idx),
+        }"
+        :draggable="!filterActive"
+        @click="onRowClick(item, $event)"
         @dragstart="onDragStart(item, $event)"
         @dragover="onDragOver(idx, $event)"
         @drop="onDrop"
@@ -159,6 +187,7 @@ const selected = computed(() => project.selectedItem)
       </div>
       <div class="drop-tail" @dragover="onTailDragOver" @drop="onDrop" />
     </div>
+    <div v-else-if="filterActive" class="empty">无匹配图层</div>
     <div v-else class="empty">还没有照片，点击顶栏「导入照片」开始</div>
 
     <div v-if="selected" class="layer-footer">
@@ -186,6 +215,9 @@ const selected = computed(() => project.selectedItem)
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+.layer-search {
+  padding: 8px 8px 4px;
 }
 .layer-list {
   flex: 1;
