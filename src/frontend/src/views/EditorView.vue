@@ -10,6 +10,7 @@ import LayerPanel from '../components/panels/LayerPanel.vue'
 import OutputPanel from '../components/panels/OutputPanel.vue'
 import PhotoPanel from '../components/panels/PhotoPanel.vue'
 import AlignBar from '../components/toolbar/AlignBar.vue'
+import StatusBar from '../components/statusbar/StatusBar.vue'
 import { useAssetsStore } from '../stores/assets'
 import { useProjectStore } from '../stores/project'
 import { useSettingsStore } from '../stores/settings'
@@ -193,11 +194,6 @@ onBeforeUnmount(() => {
         @click="project.clearGuides()"
       />
       <span class="sep" />
-      <Button icon="pi pi-minus" text title="缩小" @click="stageRef?.zoomStep(1 / 1.25)" />
-      <Button :label="`${view.zoomPercent.value}%`" text class="zoom-readout" title="点击恢复 100%" @click="stageRef?.zoom100()" />
-      <Button label="适应" text @click="stageRef?.fitView(); stageRef?.zoomStep(1)" />
-      <Button icon="pi pi-plus" text title="放大" @click="stageRef?.zoomStep(1.25)" />
-      <span class="zoom">{{ project.doc.items.length }} 张 · {{ project.doc.canvas.widthMm }}×{{ project.doc.canvas.heightMm }}mm</span>
       <span class="zoom">暗色</span>
       <ToggleSwitch v-model="darkMode" title="切换亮/暗主题" />
       <Button icon="pi pi-cog" text title="快捷键设置" @click="shortcuts.dialogOpen = true" />
@@ -233,6 +229,8 @@ onBeforeUnmount(() => {
         </Tabs>
       </aside>
     </div>
+
+    <StatusBar :view="view" :stage="stageRef" />
 
     <Dialog v-model:visible="exportDialog" header="导出" :closable="!exporting" :modal="true" :style="{ width: '420px' }">
       <div class="export-body">

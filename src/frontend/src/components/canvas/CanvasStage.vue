@@ -4,8 +4,9 @@ import { useCanvasView } from '../../composables/useCanvasView'
 import { fillOf } from '../../stores/project'
 import { useProjectStore } from '../../stores/project'
 import { setAssetImageListener, useAssetsStore } from '../../stores/assets'
-import { InteractionController, HANDLES } from './InteractionController'
+import { InteractionController } from './InteractionController'
 import { useStageResize } from '../../composables/useStageResize'
+import { interactionKind } from '../../composables/useInteractionStatus'
 import { GuidesController, type GuideEditRequest } from './GuidesController'
 import { drawGuides } from './drawGuides'
 import { useSettingsStore } from '../../stores/settings'
@@ -21,7 +22,6 @@ const props = defineProps<{ view: ReturnType<typeof useCanvasView> }>()
 const project = useProjectStore()
 const assets = useAssetsStore()
 const settings = useSettingsStore()
-// view 由 EditorView 创建并共享，工具栏的缩放读数与画布联动
 const view = props.view
 
 let ctx: CanvasRenderingContext2D | null = null
@@ -50,19 +50,21 @@ function fitView() {
   if (!el || el.clientWidth === 0 || el.clientHeight === 0) return
   const { w, h } = outSizeMm()
   view.fit(el.clientWidth, el.clientHeight, w, h)
+  scheduleDraw()
 }
 
-defineExpose({ fitView, zoomStep: (f: number) => {
+function zoomLevel(levelPxPerMm: number) {
   const el = stageEl.value
   if (!el) return
-  view.zoomTo(el.clientWidth, el.clientHeight, view.pxPerMm.value * f)
+  view.zoomTo(el.clientWidth, el.clientHeight, levelPxPerMm)
   scheduleDraw()
-}, zoom100: () => {
-  const el = stageEl.value
-  if (!el) return
-  view.zoomTo(el.clientWidth, el.clientHeight, view.PX_PER_MM_AT_100)
-  scheduleDraw()
-} })
+}
+
+defineExpose({
+  fitView,
+  zoomStep: (f: number) => zoomLevel(view.pxPerMm.value * f),
+  zoomToPercent: (pct: number) => zoomLevel((pct / 100) * view.PX_PER_MM_AT_100),
+})
 
 function roundedRectPath(x: number, y: number, w: number, h: number, r: number) {
   const rr = Math.min(r, w / 2, h / 2)
@@ -199,7 +201,6 @@ function drawSelection(rect: RectMm, primary: boolean) {
         ctx!.strokeRect(hx - 4, hy - 4, 8, 8)
       }
     }
-    void HANDLES
     // 旋转手柄
     const cx = dx + dw / 2
     ctx!.beginPath()
@@ -422,7 +423,7 @@ onMounted(() => {
     onEdit: openGuideEdit,
   })
   guidesCtl.attach()
-  controller = new InteractionController({ stage: stageEl.value!, view, redraw: scheduleDraw })
+  controller = new InteractionController({ stage: stageEl.value!, view, redraw: scheduleDraw, onInteraction: (k) => { interactionKind.value = k } })
   controller.attach()
   stageResize = useStageResize(stageEl, view, fitView, scheduleDraw)
   stageResize.observe()

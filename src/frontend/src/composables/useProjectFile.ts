@@ -14,18 +14,19 @@ interface ProjectFilePayload {
   missingAssetIds?: string[]
 }
 
+/** 当前项目文件路径（模块级共享：EditorView 操作文件，StatusBar 展示）；null = 从未保存 */
+export const currentProjectPath = ref<string | null>(null)
+
 export function useProjectFile() {
   const project = useProjectStore()
   const assets = useAssetsStore()
-  /** 当前项目文件路径；null = 从未保存（Ctrl+S 走另存为） */
-  const currentPath = ref<string | null>(null)
 
   async function saveProject() {
-    if (!currentPath.value) {
+    if (!currentProjectPath.value) {
       await saveProjectAs()
       return
     }
-    if (await writeTo(currentPath.value)) project.markClean()
+    if (await writeTo(currentProjectPath.value)) project.markClean()
   }
 
   async function saveProjectAs() {
@@ -35,7 +36,7 @@ export function useProjectFile() {
     })
     if (!path) return
     if (await writeTo(path)) {
-      currentPath.value = path
+      currentProjectPath.value = path
       project.markClean()
     }
   }
@@ -101,11 +102,11 @@ export function useProjectFile() {
     }
     assets.replaceAll(file.assets)
     project.replaceDoc(file.doc)
-    currentPath.value = path
+    currentProjectPath.value = path
     if (file.missingAssetIds?.length) {
       window.alert(`项目包中缺少 ${file.missingAssetIds.length} 张照片的图像数据，对应图层已标记为「缺失」。`)
     }
   }
 
-  return { currentPath, saveProject, saveProjectAs, openProject }
+  return { saveProject, saveProjectAs, openProject }
 }

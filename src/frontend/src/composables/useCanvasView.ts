@@ -49,6 +49,12 @@ export function useCanvasView() {
     originY.value += dyPx
   }
 
+  /** 纯平移补偿（容器 resize 居中用）：只动原点，不退出自动适配态 */
+  function recenterBy(dxPx: number, dyPx: number) {
+    originX.value += dxPx
+    originY.value += dyPx
+  }
+
   function fit(viewW: number, viewH: number, outWmm: number, outHmm: number) {
     isAutoFit.value = true
     const margin = 48
@@ -79,6 +85,7 @@ export function useCanvasView() {
     mmY,
     zoomAt,
     panBy,
+    recenterBy,
     fit,
     zoomTo,
     PX_PER_MM_AT_100,

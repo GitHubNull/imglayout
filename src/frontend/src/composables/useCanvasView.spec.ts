@@ -44,4 +44,28 @@ describe('useCanvasView', () => {
     expect(view.originX.value).toBeCloseTo((1000 - 297 * s) / 2, 6)
     expect(view.zoomPercent.value).toBe(expectedPercent(s))
   })
+
+  it('fit 进入自动适配态，zoomAt/panBy 退出', () => {
+    const view = useCanvasView()
+    expect(view.isAutoFit.value).toBe(true)
+    view.zoomAt(100, 100, 1.5)
+    expect(view.isAutoFit.value).toBe(false)
+    view.fit(1000, 800, 297, 210)
+    expect(view.isAutoFit.value).toBe(true)
+    view.panBy(10, 5)
+    expect(view.isAutoFit.value).toBe(false)
+  })
+
+  it('recenterBy 只平移原点，不退出自动适配态', () => {
+    const view = useCanvasView()
+    view.fit(1000, 800, 297, 210)
+    const ox = view.originX.value
+    const oy = view.originY.value
+    const s = view.pxPerMm.value
+    view.recenterBy(30, -20)
+    expect(view.originX.value).toBeCloseTo(ox + 30, 6)
+    expect(view.originY.value).toBeCloseTo(oy - 20, 6)
+    expect(view.pxPerMm.value).toBe(s)
+    expect(view.isAutoFit.value).toBe(true)
+  })
 })

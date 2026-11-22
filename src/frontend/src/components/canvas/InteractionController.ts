@@ -12,6 +12,7 @@ import type { RectMm } from '../../types/layout'
 import { useProjectStore } from '../../stores/project'
 import { useSettingsStore } from '../../stores/settings'
 import type { useCanvasView } from '../../composables/useCanvasView'
+import type { InteractionKind } from '../../composables/useInteractionStatus'
 
 export type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 export const HANDLES: HandleId[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
@@ -40,6 +41,8 @@ interface Deps {
   stage: HTMLElement
   view: ReturnType<typeof useCanvasView>
   redraw: () => void
+  /** 交互状态变化通知（状态栏提示用） */
+  onInteraction?: (kind: InteractionKind) => void
 }
 
 export class InteractionController {
@@ -52,6 +55,10 @@ export class InteractionController {
   alignLines: { v: number[]; h: number[] } | null = null
   private onKeyDown: (e: KeyboardEvent) => void
   private onKeyUp: (e: KeyboardEvent) => void
+
+  private emit(kind: InteractionKind) {
+    this.deps.onInteraction?.(kind)
+  }
 
   constructor(deps: Deps) {
     this.deps = deps
@@ -92,6 +99,7 @@ export class InteractionController {
     el.removeEventListener('contextmenu', this.handleContextMenu)
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
+    this.emit('idle')
   }
 
   /** 框选矩形（毫米，已归一化）；未在框选时返回 null */
@@ -185,6 +193,7 @@ export class InteractionController {
 
     if (e.button === 1 || e.button === 2 || (e.button === 0 && this.spaceDown)) {
       this.state = { kind: 'pan', lastX: e.clientX, lastY: e.clientY }
+      this.emit('pan')
       el.style.cursor = 'grabbing'
       e.preventDefault()
       return
@@ -203,6 +212,7 @@ export class InteractionController {
           centerYmm: item.rect.yMm + item.rect.hMm / 2,
           moved: false,
         }
+        this.emit('rotate')
       } else {
         this.state = {
           kind: 'resize',
@@ -213,6 +223,7 @@ export class InteractionController {
           startYmm: mm.y,
           moved: false,
         }
+        this.emit('resize')
       }
       return
     }
@@ -247,6 +258,7 @@ export class InteractionController {
       this.startMove(project, itemId, mm)
     } else if (!itemId) {
       this.state = { kind: 'marquee', startXmm: mm.x, startYmm: mm.y, curXmm: mm.x, curYmm: mm.y }
+      this.emit('marquee')
     }
     this.deps.redraw()
   }
@@ -277,6 +289,7 @@ export class InteractionController {
       grabDyMm: mm.y - item.rect.yMm,
       moved: false,
     }
+    this.emit('move')
   }
 
   private isRotateHandle(pxX: number, pxY: number): boolean {
@@ -407,11 +420,13 @@ export class InteractionController {
       this.collapseCandidate = null
       const project = useProjectStore()
       if (project.selectedIds.length > 1) project.select(id)
+      this.emit('idle')
       return
     }
     this.collapseCandidate = null
     if (state?.kind === 'move' && !state.moved && useProjectStore().selectedIds.length > 1) {
       useProjectStore().select(state.itemId)
+      this.emit('idle')
       return
     }
     if (state?.kind === 'pan') {
@@ -443,6 +458,7 @@ export class InteractionController {
     // 历史已在首次改动前（beginMutation）记录，此处不再快照
     this.alignLines = null
     this.state = null
+    this.emit('idle')
     this.deps.redraw()
   }
 

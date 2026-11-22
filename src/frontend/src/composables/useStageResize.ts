@@ -24,7 +24,7 @@ export function useStageResize(
     if (view.isAutoFit.value) {
       fit()
     } else if (lastW > 0 && lastH > 0 && (w !== lastW || h !== lastH)) {
-      view.panBy((w - lastW) / 2, (h - lastH) / 2)
+      view.recenterBy((w - lastW) / 2, (h - lastH) / 2)
     }
     lastW = w
     lastH = h
