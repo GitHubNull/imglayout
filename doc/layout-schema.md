@@ -20,6 +20,9 @@
   // grid/masonry 字段仅在对应 mode 下存在；free 模式无布局配置
   // masonry 无 fill：框高由照片（裁剪后）宽高比决定，照片等比填满自己的框
   "groups": [ { "id": "group-uuid", "name": null } ],  // 自由布局组合；旧文档可无此字段（默认 []）
+  "guides": [ { "id": "guide-uuid", "axis": "x", "posMm": 100.5, "locked": false } ],
+  // 参考线：axis 'x'=竖直线（定 x 坐标）/'y'=水平线（定 y 坐标）；posMm 为距成品左缘/顶缘毫米值
+  // 仅编辑器辅助显示，不导出；旧文档可无此字段（默认 []），locked 缺省 false
   "items": [ /* PhotoItem[]，数组顺序 = free 模式层级（底→顶） */ ]
 }
 ```
@@ -54,6 +57,7 @@
 - **opacity**：导出时把该层合成结果的 alpha 通道按比例缩放后再 blend 到画布；预览用 canvas `globalAlpha` 近似。
 - **locked**：只约束画布交互（InteractionController），图层面板仍可重命名/删除/复制/调不透明度。
 - **groups / groupId**：组合仅影响画布交互（组内成员联动移动、连带删除）；渲染与导出忽略组。旧项目文件无这两个字段时按空组合处理。
+- **guides**：参考线仅自由排版模式在画布上显示与交互（拖出/拖动/拖回删除），拖动照片时作为吸附目标；渲染与导出忽略参考线。旧项目文件无该字段时按空数组处理。
 
 ## AssetEntry（导入照片登记表，不入 LayoutDoc）
 

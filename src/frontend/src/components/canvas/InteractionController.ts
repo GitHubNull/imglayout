@@ -331,8 +331,12 @@ export class InteractionController {
         const others = project.doc.items
           .filter((i) => !movingIds.has(i.id))
           .map((i) => i.rect)
-        const targets = snapTargets(project.doc.canvas, others)
-        snapped = snapRectTranslate(draft, targets, targets)
+        const base = snapTargets(project.doc.canvas, others)
+        // 参考线隐藏时不参与吸附（与 PS 口径一致）
+        const guides = settings.guidesVisible ? (project.doc.guides ?? []) : []
+        const gx = guides.filter((g) => g.axis === 'x').map((g) => g.posMm)
+        const gy = guides.filter((g) => g.axis === 'y').map((g) => g.posMm)
+        snapped = snapRectTranslate(draft, [...base, ...gx], [...base, ...gy])
       }
       if (settings.gridSnap) {
         const grid = snapGridTranslate(snapped, settings.gridStepMm)

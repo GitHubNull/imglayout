@@ -9,7 +9,21 @@ export interface LayoutDoc {
   masonry?: MasonryConfig
   /** 自由布局组合；旧文档无该字段时按空数组处理 */
   groups?: Group[]
+  /** 参考线；旧文档无该字段时按空数组处理 */
+  guides?: Guide[]
   items: PhotoItem[]
+}
+
+/** 'x'=竖直参考线（定 x 坐标），'y'=水平参考线（定 y 坐标） */
+export type GuideAxis = 'x' | 'y'
+
+export interface Guide {
+  id: string
+  axis: GuideAxis
+  /** 距成品左缘('x')或顶缘('y')的毫米值，与 item rect 同口径 */
+  posMm: number
+  /** 锁定后不可拖动/删除 */
+  locked?: boolean
 }
 
 export interface Group {

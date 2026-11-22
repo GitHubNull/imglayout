@@ -87,6 +87,7 @@ fn main() {
         }),
         masonry: None,
         groups: vec![],
+        guides: vec![],
         items,
     };
 

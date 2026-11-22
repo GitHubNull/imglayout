@@ -20,6 +20,7 @@ import TabPanel from 'primevue/tabpanel'
 import TabPanels from 'primevue/tabpanels'
 import Tabs from 'primevue/tabs'
 import ToggleButton from 'primevue/togglebutton'
+import ToggleSwitch from 'primevue/toggleswitch'
 import App from './App.vue'
 import './style.css'
 
@@ -57,5 +58,6 @@ app.component('TabPanel', TabPanel)
 app.component('TabPanels', TabPanels)
 app.component('Tabs', Tabs)
 app.component('ToggleButton', ToggleButton)
+app.component('ToggleSwitch', ToggleSwitch)
 
 app.mount('#app')

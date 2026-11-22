@@ -50,6 +50,7 @@ fn grid_doc(items: Vec<PhotoItem>, cfg: GridConfig) -> LayoutDoc {
         grid: Some(cfg),
         masonry: None,
         groups: vec![],
+        guides: vec![],
         items,
     }
 }
@@ -369,6 +370,7 @@ fn masonry_export_places_photos_by_column() {
             outer_mm: 0.0,
         }),
         groups: vec![],
+        guides: vec![],
         items: vec![item("i1", "a"), item("i2", "a")],
     };
     let out = dir.path().join("out.png");
@@ -404,6 +406,7 @@ fn free_mode_uses_item_rect_directly() {
         grid: None,
         masonry: None,
         groups: vec![],
+        guides: vec![],
         items: vec![placed],
     };
     let out = dir.path().join("out.png");

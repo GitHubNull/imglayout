@@ -8,6 +8,7 @@ import {
   type CanvasSpec,
   type FillMode,
   type GridConfig,
+  type Guide,
   type LayoutDoc,
   type LayoutMode,
   type MasonryConfig,
@@ -52,6 +53,7 @@ export const useProjectStore = defineStore('project', {
   state: () => ({
     doc: emptyDoc(),
     selectedIds: [] as string[],
+    selectedGuideIds: [] as string[],
     undoStack: [] as string[],
     redoStack: [] as string[],
   }),
@@ -88,6 +90,7 @@ export const useProjectStore = defineStore('project', {
       this.redoStack.push(JSON.stringify(this.doc))
       this.doc = JSON.parse(prev)
       this.pruneSelection()
+      this.pruneGuideSelection()
     },
     redo() {
       const next = this.redoStack.pop()
@@ -95,11 +98,17 @@ export const useProjectStore = defineStore('project', {
       this.undoStack.push(JSON.stringify(this.doc))
       this.doc = JSON.parse(next)
       this.pruneSelection()
+      this.pruneGuideSelection()
     },
     /** 清掉 selectedIds 中已不在文档里的 id（undo/redo/删除后调用） */
     pruneSelection() {
       const alive = new Set(this.doc.items.map((i) => i.id))
       this.selectedIds = this.selectedIds.filter((id) => alive.has(id))
+    },
+    /** 清掉 selectedGuideIds 中已不在文档里的 id（undo/redo/删除后调用） */
+    pruneGuideSelection() {
+      const alive = new Set((this.doc.guides ?? []).map((g) => g.id))
+      this.selectedGuideIds = this.selectedGuideIds.filter((id) => alive.has(id))
     },
     select(id: string | null) {
       this.selectedIds = id ? [id] : []
@@ -118,6 +127,16 @@ export const useProjectStore = defineStore('project', {
       this.doc.mode = mode
       if (mode === 'grid' && !this.doc.grid) this.doc.grid = defaultGrid()
       if (mode === 'masonry' && !this.doc.masonry) this.doc.masonry = defaultMasonry()
+      if (mode === 'free') {
+        // grid/masonry 下 item.rect 为 0（显示 rect 由算法算出），free 直接使用 item.rect：
+        // 切回时给零尺寸项补齐默认错位摆放，否则照片在画布上不可见
+        let cascade = this.doc.items.length % 6
+        for (const item of this.doc.items) {
+          if (item.rect.wMm > 0 && item.rect.hMm > 0) continue
+          item.rect = { xMm: 12 + cascade * 8, yMm: 12 + cascade * 8, wMm: 60, hMm: 60 }
+          cascade++
+        }
+      }
     },
     updateCanvas(patch: Partial<CanvasSpec>, recordHistory = true) {
       if (recordHistory) this.snapshot()
@@ -256,9 +275,54 @@ export const useProjectStore = defineStore('project', {
         }
       }
     },
+    addGuide(guide: Guide) {
+      this.snapshot()
+      this.doc.guides = [...(this.doc.guides ?? []), guide]
+      this.selectedGuideIds = [guide.id]
+    },
+    /** 拖动改位置高频调用，不 snapshot，由调用方在 pointerup 时统一 snapshot */
+    updateGuidePos(id: string, posMm: number) {
+      const g = (this.doc.guides ?? []).find((x) => x.id === id)
+      if (g) g.posMm = posMm
+    },
+    setGuideLocked(id: string, locked: boolean) {
+      const g = (this.doc.guides ?? []).find((x) => x.id === id)
+      if (!g || g.locked === locked) return
+      this.snapshot()
+      g.locked = locked
+    },
+    /** 删除参考线；锁定线跳过 */
+    removeGuides(ids: string[]) {
+      const dead = new Set(ids)
+      const guides = this.doc.guides ?? []
+      if (!guides.some((g) => dead.has(g.id) && !g.locked)) return
+      this.snapshot()
+      this.doc.guides = guides.filter((g) => !dead.has(g.id) || g.locked)
+      this.pruneGuideSelection()
+    },
+    /** 清除全部未锁定参考线 */
+    clearGuides() {
+      const guides = this.doc.guides ?? []
+      if (!guides.some((g) => !g.locked)) return
+      this.snapshot()
+      this.doc.guides = guides.filter((g) => g.locked)
+      this.pruneGuideSelection()
+    },
+    selectGuide(id: string) {
+      this.selectedGuideIds = [id]
+    },
+    toggleGuideSelect(id: string) {
+      const idx = this.selectedGuideIds.indexOf(id)
+      if (idx >= 0) this.selectedGuideIds.splice(idx, 1)
+      else this.selectedGuideIds.push(id)
+    },
+    clearGuideSelection() {
+      this.selectedGuideIds = []
+    },
     replaceDoc(doc: LayoutDoc) {
       this.doc = doc
       this.selectedIds = []
+      this.selectedGuideIds = []
       this.undoStack = []
       this.redoStack = []
     },

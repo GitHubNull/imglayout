@@ -5,8 +5,10 @@ import { fillOf } from '../../stores/project'
 import { useProjectStore } from '../../stores/project'
 import { setAssetImageListener, useAssetsStore } from '../../stores/assets'
 import { InteractionController, HANDLES } from './InteractionController'
+import { GuidesController, type GuideEditRequest } from './GuidesController'
+import { drawGuides } from './drawGuides'
 import { useSettingsStore } from '../../stores/settings'
-import { rulerSteps } from '../../lib/ruler'
+import { drawRulers } from '../../lib/ruler'
 import type { PhotoItem, RectMm } from '../../types/layout'
 
 const stageEl = ref<HTMLDivElement | null>(null)
@@ -22,6 +24,7 @@ const view = props.view
 
 let ctx: CanvasRenderingContext2D | null = null
 let controller: InteractionController | null = null
+let guidesCtl: GuidesController | null = null
 let resizeObserver: ResizeObserver | null = null
 let rafPending = false
 
@@ -239,9 +242,21 @@ function draw() {
   })
 
   drawGrid()
+  drawGuidesLayer()
   drawAxisHighlight()
   drawMarquee()
-  drawRulers()
+  if (settings.rulerVisible) drawRulers(ctx, view, w, h, c)
+}
+
+/** 参考线：仅自由排版且开启显示时绘制 */
+function drawGuidesLayer() {
+  if (!ctx || project.doc.mode !== 'free' || !settings.guidesVisible) return
+  drawGuides(ctx, view, project.doc.canvas, {
+    guides: project.doc.guides ?? [],
+    selectedIds: project.selectedGuideIds,
+    hoveredId: guidesCtl?.hoveredId ?? null,
+    draft: guidesCtl?.draft ?? null,
+  })
 }
 
 /** 自由布局网格：按 settings.gridStepMm 画线，屏幕间距过密时自动跳档 */
@@ -319,71 +334,20 @@ function drawMarquee() {
   ctx.restore()
 }
 
-/** 标尺：X 轴在底部、Y 轴在左侧，原点 = 成品左下角（Y 从底部向上读数） */
-function drawRulers() {
-  const canvas = canvasEl.value
-  if (!settings.rulerVisible || !canvas || !ctx) return
-  const w = canvas.clientWidth
-  const h = canvas.clientHeight
-  const c = project.doc.canvas
-  const s = view.pxPerMm.value
-  const b = c.bleedMm
-  const R = 20
-  const step = rulerSteps(s)
-
-  ctx.save()
-  ctx.fillStyle = 'rgba(250, 250, 249, 0.94)'
-  ctx.fillRect(0, 0, R, h)
-  ctx.fillRect(0, h - R, w, R)
-  ctx.strokeStyle = '#D6D3D1'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(R + 0.5, 0)
-  ctx.lineTo(R + 0.5, h)
-  ctx.moveTo(0, h - R + 0.5)
-  ctx.lineTo(w, h - R + 0.5)
-  ctx.stroke()
-
-  ctx.fillStyle = '#78716C'
-  ctx.strokeStyle = '#A8A29E'
-  ctx.font = '9px sans-serif'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'alphabetic'
-
-  // X 轴：标签 = 距成品左缘的毫米值
-  for (let v = Math.ceil(-b / step) * step; v <= c.widthMm + b + 1e-6; v += step) {
-    const x = Math.round(view.screenX(v, b)) + 0.5
-    ctx.beginPath()
-    ctx.moveTo(x, h - R)
-    ctx.lineTo(x, h - R + (Math.abs(v % (step * 5)) < 1e-6 ? 7 : 4))
-    ctx.stroke()
-    if (v >= -1e-6 && v <= c.widthMm + 1e-6) {
-      ctx.fillText(String(Math.round(v * 10) / 10), x + 2, h - R + 11)
-    }
-  }
-
-  // Y 轴：标签 = 距成品底缘的毫米值（= heightMm − mmY），左对齐防三位数被裁
-  ctx.textAlign = 'left'
-  for (let v = Math.ceil(-b / step) * step; v <= c.heightMm + b + 1e-6; v += step) {
-    const y = Math.round(view.screenY(v, b)) + 0.5
-    ctx.beginPath()
-    ctx.moveTo(R, y)
-    ctx.lineTo(R - (Math.abs(v % (step * 5)) < 1e-6 ? 7 : 4), y)
-    ctx.stroke()
-    if (v >= -1e-6 && v <= c.heightMm + 1e-6) {
-      ctx.fillText(String(Math.round((c.heightMm - v) * 10) / 10), 2, y + 3)
-    }
-  }
-  ctx.restore()
-}
-
 function onKeyDown(e: KeyboardEvent) {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
   const project = useProjectStore()
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    controller?.deleteSelected()
+    if (project.selectedGuideIds.length) {
+      project.removeGuides([...project.selectedGuideIds])
+      scheduleDraw()
+    } else {
+      controller?.deleteSelected()
+    }
   } else if (e.key === 'Escape') {
     project.clearSelection()
+    project.clearGuideSelection()
+    guideEdit.value = null
     scheduleDraw()
   } else if (e.key === 'ArrowLeft' && e.shiftKey) {
     controller?.nudgeSelected(-1, 0)
@@ -396,8 +360,63 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
+interface GuideEditState {
+  id: string
+  axis: 'x' | 'y'
+  /** 标尺口径毫米值（y 线 = heightMm − posMm），与标尺读数一致 */
+  value: number | null
+  locked: boolean
+  left: number
+  top: number
+}
+const guideEdit = ref<GuideEditState | null>(null)
+
+function openGuideEdit(req: GuideEditRequest) {
+  const el = stageEl.value
+  if (!el) return
+  const c = project.doc.canvas
+  const shown = req.axis === 'x' ? req.posMm : c.heightMm - req.posMm
+  const max = req.axis === 'x' ? c.widthMm : c.heightMm
+  guideEdit.value = {
+    id: req.id,
+    axis: req.axis,
+    value: Math.round(Math.min(max, Math.max(0, shown)) * 10) / 10,
+    locked: !!project.doc.guides?.find((g) => g.id === req.id)?.locked,
+    left: Math.min(Math.max(req.left, 90), el.clientWidth - 90),
+    top: Math.min(Math.max(req.top, 44), el.clientHeight - 44),
+  }
+}
+
+function commitGuideEdit() {
+  const ge = guideEdit.value
+  if (!ge || ge.value == null) return
+  const c = project.doc.canvas
+  const max = ge.axis === 'x' ? c.widthMm : c.heightMm
+  const shown = Math.min(max, Math.max(0, ge.value))
+  const posMm = ge.axis === 'x' ? shown : c.heightMm - shown
+  const guide = project.doc.guides?.find((g) => g.id === ge.id)
+  if (!guide) {
+    guideEdit.value = null
+    return
+  }
+  const lockChanged = !!guide.locked !== ge.locked
+  const posChanged = Math.abs(guide.posMm - posMm) > 1e-9
+  if (lockChanged) project.setGuideLocked(ge.id, ge.locked)
+  else if (posChanged) project.snapshot()
+  project.updateGuidePos(ge.id, posMm)
+  guideEdit.value = null
+  scheduleDraw()
+}
+
 onMounted(() => {
   ctx = canvasEl.value!.getContext('2d')
+  guidesCtl = new GuidesController({
+    stage: stageEl.value!,
+    view,
+    redraw: scheduleDraw,
+    onEdit: openGuideEdit,
+  })
+  guidesCtl.attach()
   controller = new InteractionController({ stage: stageEl.value!, view, redraw: scheduleDraw })
   controller.attach()
   resizeObserver = new ResizeObserver(() => {
@@ -414,6 +433,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  guidesCtl?.detach()
   controller?.detach()
   resizeObserver?.disconnect()
   window.removeEventListener('keydown', onKeyDown)
@@ -424,6 +444,23 @@ onBeforeUnmount(() => {
 <template>
   <div ref="stageEl" class="canvas-stage" tabindex="0">
     <canvas ref="canvasEl" class="draw-canvas" />
+    <div v-if="guideEdit" class="guide-edit" :style="{ left: guideEdit.left + 'px', top: guideEdit.top + 'px' }">
+      <InputNumber
+        v-model="guideEdit.value"
+        :min="0"
+        :max="guideEdit.axis === 'x' ? project.doc.canvas.widthMm : project.doc.canvas.heightMm"
+        :step="0.1"
+        :max-fraction-digits="1"
+        :prefix="guideEdit.axis === 'x' ? 'X ' : 'Y '"
+        size="small"
+        class="guide-edit-input"
+        autofocus
+        @keyup.enter="commitGuideEdit"
+        @keyup.esc="guideEdit = null"
+      />
+      <ToggleSwitch v-model="guideEdit.locked" title="锁定参考线" />
+      <Button icon="pi pi-check" text title="确定 (Enter)" @click="commitGuideEdit" />
+    </div>
   </div>
 </template>
 
@@ -440,5 +477,21 @@ onBeforeUnmount(() => {
   display: block;
   width: 100%;
   height: 100%;
+}
+.guide-edit {
+  position: absolute;
+  transform: translate(-50%, -110%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--p-content-background);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+.guide-edit-input {
+  width: 110px;
 }
 </style>

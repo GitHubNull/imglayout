@@ -32,6 +32,24 @@ describe('project store 图层管理', () => {
     expect(store.doc.items.map((i) => i.id)).toEqual(['a', 'b', 'c'])
   })
 
+  it('切到 free 模式时零尺寸 rect 补齐为默认错位摆放', () => {
+    const store = useProjectStore()
+    seed(store, ['a', 'b'])
+    expect(store.doc.items.every((i) => i.rect.wMm === 0)).toBe(true)
+    store.setMode('free')
+    for (const item of store.doc.items) {
+      expect(item.rect.wMm).toBe(60)
+      expect(item.rect.hMm).toBe(60)
+    }
+    // 已有尺寸的项不被覆盖
+    store.setMode('grid')
+    store.doc.items[0].rect = { xMm: 5, yMm: 5, wMm: 30, hMm: 30 }
+    store.doc.items[1].rect = { xMm: 0, yMm: 0, wMm: 0, hMm: 0 }
+    store.setMode('free')
+    expect(store.doc.items[0].rect.wMm).toBe(30)
+    expect(store.doc.items[1].rect.wMm).toBe(60)
+  })
+
   it('duplicateItem 复制插入原层上方、生成新 id 并选中', () => {
     const store = useProjectStore()
     store.doc.mode = 'free'

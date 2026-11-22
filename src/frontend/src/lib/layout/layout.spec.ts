@@ -143,4 +143,15 @@ describe('free 吸附对拍', () => {
     expect(snapGridTranslate(rect, 0)).toBe(rect)
     expect(snapGridTranslate({ ...rect, xMm: 12.4 }, 5).xMm).toBe(10)
   })
+
+  it('参考线坐标并入吸附目标（x/y 分轴）', () => {
+    const rect: RectMm = { xMm: 99.7, yMm: 14.7, wMm: 20, hMm: 20 }
+    const snapped = snapRectTranslate(rect, [100], [15])
+    expect(snapped.xMm).toBe(100)
+    expect(snapped.yMm).toBe(15)
+    // 分轴独立：x 目标不影响 y
+    const snapped2 = snapRectTranslate(rect, [], [15])
+    expect(snapped2.xMm).toBe(99.7)
+    expect(snapped2.yMm).toBe(15)
+  })
 })

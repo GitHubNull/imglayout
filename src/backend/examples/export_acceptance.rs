@@ -104,6 +104,7 @@ fn build_doc(preset_id: &str, tile_paths: &[String]) -> (LayoutDoc, HashMap<Stri
             }),
             masonry: None,
             groups: vec![],
+            guides: vec![],
             items,
         },
         assets,

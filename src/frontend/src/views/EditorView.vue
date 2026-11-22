@@ -157,7 +157,6 @@ onBeforeUnmount(() => {
 <template>
   <div class="editor">
     <header class="toolbar">
-      <span class="brand">imgLayout</span>
       <Button label="导入照片" icon="pi pi-images" @click="importPhotos" />
       <Button icon="pi pi-save" text title="保存项目 (Ctrl+S)" @click="saveProject" />
       <Button icon="pi pi-folder-open" text title="打开项目" @click="openProject" />
@@ -190,6 +189,14 @@ onBeforeUnmount(() => {
       <ToggleButton v-model="settings.gridSnap" on-icon="pi pi-bolt" off-icon="pi pi-bolt" on-label="" off-label="" title="网格吸附" />
       <ToggleButton v-model="settings.edgeSnap" on-icon="pi pi-arrow-down-left" off-icon="pi pi-arrow-down-left" on-label="" off-label="" title="边缘吸附" />
       <ToggleButton v-model="settings.rulerVisible" on-icon="pi pi-table" off-icon="pi pi-table" on-label="" off-label="" title="标尺" />
+      <ToggleButton v-model="settings.guidesVisible" on-icon="pi pi-arrows-alt" off-icon="pi pi-arrows-alt" on-label="" off-label="" title="参考线" />
+      <Button
+        icon="pi pi-times-circle"
+        text
+        title="清除全部参考线（锁定除外）"
+        :disabled="!(project.doc.guides ?? []).some((g) => !g.locked)"
+        @click="project.clearGuides()"
+      />
       <span class="sep" />
       <Button icon="pi pi-minus" text title="缩小" @click="stageRef?.zoomStep(1 / 1.25)" />
       <Button :label="`${view.zoomPercent.value}%`" text class="zoom-readout" title="点击恢复 100%" @click="stageRef?.zoom100()" />
@@ -201,16 +208,12 @@ onBeforeUnmount(() => {
 
     <div class="main">
       <aside class="side">
-        <Tabs value="output">
+        <Tabs value="layers">
           <TabList>
-            <Tab value="output">输出</Tab>
-            <Tab value="layout">布局</Tab>
             <Tab value="layers">图层</Tab>
             <Tab value="photo">照片</Tab>
           </TabList>
           <TabPanels>
-            <TabPanel value="output"><OutputPanel /></TabPanel>
-            <TabPanel value="layout"><LayoutPanel /></TabPanel>
             <TabPanel value="layers"><LayerPanel /></TabPanel>
             <TabPanel value="photo"><PhotoPanel /></TabPanel>
           </TabPanels>
@@ -219,6 +222,18 @@ onBeforeUnmount(() => {
       <div class="stage-wrap">
         <CanvasStage ref="stageRef" :view="view" />
       </div>
+      <aside class="side side-right">
+        <Tabs value="output">
+          <TabList>
+            <Tab value="output">输出</Tab>
+            <Tab value="layout">布局</Tab>
+          </TabList>
+          <TabPanels>
+            <TabPanel value="output"><OutputPanel /></TabPanel>
+            <TabPanel value="layout"><LayoutPanel /></TabPanel>
+          </TabPanels>
+        </Tabs>
+      </aside>
     </div>
 
     <Dialog v-model:visible="exportDialog" header="导出" :closable="!exporting" :modal="true" :style="{ width: '420px' }">
@@ -285,10 +300,6 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--p-content-border-color);
   background: var(--p-content-background);
 }
-.brand {
-  font-weight: 700;
-  margin-right: 12px;
-}
 .spacer {
   flex: 1;
 }
@@ -312,7 +323,7 @@ onBeforeUnmount(() => {
 }
 .stage-wrap {
   flex: 1;
-  min-width: 0;
+  min-width: 280px;
 }
 .side {
   width: 300px;
@@ -321,6 +332,22 @@ onBeforeUnmount(() => {
   background: var(--p-content-background);
   overflow-y: auto;
   overflow-x: hidden;
+}
+.side-right {
+  border-right: none;
+  border-left: 1px solid var(--p-content-border-color);
+}
+@media (max-width: 1280px) {
+  .side,
+  .side-right {
+    width: 240px;
+  }
+}
+@media (max-width: 1024px) {
+  .side,
+  .side-right {
+    width: 200px;
+  }
 }
 .zoom-readout {
   min-width: 56px;

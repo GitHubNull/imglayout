@@ -15,6 +15,9 @@ pub struct LayoutDoc {
     /// 自由布局组合；旧文档无该字段时按空数组处理。
     #[serde(default)]
     pub groups: Vec<Group>,
+    /// 参考线；旧文档无该字段时按空数组处理。
+    #[serde(default)]
+    pub guides: Vec<Guide>,
     pub items: Vec<PhotoItem>,
 }
 
@@ -24,6 +27,26 @@ pub struct Group {
     pub id: String,
     #[serde(default)]
     pub name: Option<String>,
+}
+
+/// 参考线方向：X=竖直参考线（定 x 坐标），Y=水平参考线（定 y 坐标）。
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GuideAxis {
+    X,
+    Y,
+}
+
+/// 参考线；pos_mm 为距成品左缘(X)/顶缘(Y)的毫米值，与 item rect 同口径。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Guide {
+    pub id: String,
+    pub axis: GuideAxis,
+    pub pos_mm: f64,
+    /// 锁定后不可拖动/删除。
+    #[serde(default)]
+    pub locked: bool,
 }
 
 fn default_version() -> u32 {
@@ -248,11 +271,13 @@ mod tests {
             grid: None,
             masonry: None,
             groups: vec![],
+            guides: vec![],
             items: vec![],
         };
         let json = serde_json::to_value(&doc).unwrap();
         assert!(json["canvas"]["widthMm"].is_number());
         assert!(json["canvas"]["bleedMm"].is_number());
+        assert!(json["guides"].is_array());
     }
 
     #[test]
@@ -264,7 +289,26 @@ mod tests {
         )
         .unwrap();
         assert!(doc.groups.is_empty());
+        assert!(doc.guides.is_empty());
         assert_eq!(doc.items[0].group_id, None);
+    }
+
+    #[test]
+    fn guides_roundtrip_and_legacy_default() {
+        // guides 字段 camelCase 往返；无 locked 字段的旧数据默认未锁定
+        let doc: LayoutDoc = serde_json::from_str(
+            r##"{"version":1,"canvas":{"widthMm":297,"heightMm":210,"dpi":300,"background":"#FFFFFF","bleedMm":0},
+                "mode":"free","guides":[{"id":"g1","axis":"x","posMm":100.5},{"id":"g2","axis":"y","posMm":20.0,"locked":true}],
+                "items":[]}"##,
+        )
+        .unwrap();
+        assert_eq!(doc.guides.len(), 2);
+        assert_eq!(doc.guides[0].axis, GuideAxis::X);
+        assert!(!doc.guides[0].locked);
+        assert!(doc.guides[1].locked);
+        let json = serde_json::to_value(&doc).unwrap();
+        assert_eq!(json["guides"][0]["posMm"], 100.5);
+        assert_eq!(json["guides"][1]["axis"], "y");
     }
 
     #[test]
