@@ -14,9 +14,17 @@ imgLayout 是一款跨平台的桌面排版工具：把多张照片按网格、�
 - **打印级导出**：JPEG/PNG，按画布 DPI 渲染成图
 - **亮/暗主题**：默认 Photoshop 式暗灰主题，一键切换
 
-<!-- TODO: 发布前补截图
-![主界面](docs/screenshots/main.png)
--->
+## 界面预览
+
+![主界面：网格排版 + 图层面板 + 打印参数面板](doc/screenshots/main.webp)
+
+| 瀑布流排版 | 精排版工具：标尺 / 参考线 / 网格吸附 |
+| ---- | ---- |
+| ![瀑布流排版](doc/screenshots/masonry.webp) | ![精排版工具](doc/screenshots/tools.webp) |
+
+![打印级导出：JPEG/PNG，按画布毫米尺寸与 DPI 渲染](doc/screenshots/export.webp)
+
+> 预览图中的演示照片来自 [Unsplash](https://unsplash.com/)。
 
 ## 安装
 

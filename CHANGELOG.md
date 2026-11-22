@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### Added
+- README 界面预览：新增 `doc/screenshots/` 真实运行截图（主界面、瀑布流排版、精排版工具、打印导出，WebP 共约 1MB），替换原截图 TODO 占位，演示照片来自 Unsplash
 - 图层面板：新增图层序号列（行首显示，顶部图层序号最大），工具行 `#` 按钮可隐藏/恢复（默认显示，设置存 localStorage 自动持久化）；排序组支持序号升/降、文件名升/降四种视图排序（默认按序号，排序只改视图不改叠放次序，与搜索过滤可叠加）；非默认排序或过滤激活时自动禁用拖拽排序
 - 软件内帮助：顶栏新增「使用教程」（问号）与「关于」（i 图标）入口；教程弹窗由简入繁分三章（快速开始/图层与排版/导出与项目包），数据与 `doc/user/` 教程文档一一对应；关于对话框展示版本号（构建期经 `virtual:app-info` 从根 package.json 注入，单一来源）、作者 GitHubNull、MIT 协议全文与内嵌 CHANGELOG 更新历史
 - 仓库文档：新增根 README（简介/安装/构建/文档索引）、AGENTS.md（AI 代理工作指引）、LICENSE（MIT）、LEGAL.md（法律免责声明）；`doc/` 下新增 `user/`、`developer/`、`ai-agent/` 三个语义化目录，各含由简入繁的三级中文教程，并新增 doc/README.md 索引
