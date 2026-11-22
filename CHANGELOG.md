@@ -17,6 +17,9 @@
 - Windows 一键打包脚本 `script/build-windows.bat`（+ `build-windows.ps1`）：双击即自动装依赖、构建前端、编译 Rust 并生成 NSIS 安装包，缺少 Node.js/pnpm/Rust 时中文提示安装方法；bat 为纯 ASCII 启动器、逻辑在 ps1（规避 cmd UTF-8 代码页解析中文批处理的缺陷）
 
 ### Fixed
+- 修复图层面板排序控件点击当前已选项会把排序值清空（PrimeVue `SelectButton` 默认 `allowEmpty`），导致图层列表渲染异常、所有缩略图消失：排序/布局模式/导出格式三处分段选择器统一关闭 allowEmpty，视图排序增加默认分支兜底，并补真实点击的回归测试
+- 修复 Tauri 前后端钩子工作目录（仓库根）与 `--dir frontend` 不匹配导致 `beforeDevCommand`/`beforeBuildCommand` 报 `ENOENT ...\frontend`：改为 `--dir src/frontend`
+- 修复 Windows 下 vitest 无法加载关于对话框：Vue 模板把公共资源 `/favicon.svg` 转成构建期导入，触发 Vitest 模块运行器对 `file:///favicon.svg` 调用 `createRequire` 报错；改为运行时绑定 `:src`，渲染结果不变
 - 修复背景色/边框色 ColorPicker 保存值缺 `#` 前缀（PrimeVue hex 格式不带 #）导致导出背景恒为白色、预览背景/边框色不生效；写文档时统一收敛为 `#RRGGBB`，Rust `parse_hex_color` 同时兼容裸 hex 以覆盖历史项目文件
 - 修复关于对话框把 CHANGELOG 原始 Markdown 当纯文本输出：改为极简安全渲染（标题/列表/加粗/链接，先转义 HTML，无注入面）
 - 修复图层面板排序组与 `#` 序号开关按钮尺寸不协调（统一 26px 高、11px 字号）

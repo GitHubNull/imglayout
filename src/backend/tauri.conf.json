@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.imglayout.app",
   "build": {
-    "beforeDevCommand": "pnpm --dir frontend dev",
+    "beforeDevCommand": "pnpm --dir src/frontend dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm --dir frontend build",
+    "beforeBuildCommand": "pnpm --dir src/frontend build",
     "frontendDist": "../frontend/dist"
   },
   "app": {

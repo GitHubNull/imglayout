@@ -35,7 +35,7 @@ SOFTWARE.`
   <Dialog v-model:visible="visible" header="关于 imgLayout" :modal="true" :style="{ width: '560px' }">
     <div class="about-body">
       <div class="about-brand">
-        <img src="/favicon.svg" alt="" class="about-icon" />
+        <img :src="'/favicon.svg'" alt="" class="about-icon" />
         <div>
           <div class="about-name">imgLayout 照片拼接打印工具</div>
           <div class="about-meta">版本 v{{ APP_VERSION }} · 作者 GitHubNull</div>

@@ -29,7 +29,7 @@ const masonry = computed(() => project.doc.masonry)
   <div class="panel-body">
     <label class="field">
       <span>布局模式</span>
-      <SelectButton v-model="mode" :options="modeOptions" option-label="label" option-value="value" class="w-full seg-vertical" />
+      <SelectButton v-model="mode" :options="modeOptions" option-label="label" option-value="value" :allow-empty="false" class="w-full seg-vertical" />
     </label>
 
     <template v-if="mode === 'grid' && grid">

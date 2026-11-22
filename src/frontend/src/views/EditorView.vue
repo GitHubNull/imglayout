@@ -212,6 +212,7 @@ onBeforeUnmount(() => {
               :options="[{ label: 'JPEG', value: 'jpeg' }, { label: 'PNG', value: 'png' }]"
               option-label="label"
               option-value="value"
+              :allow-empty="false"
               class="w-full"
             />
           </label>

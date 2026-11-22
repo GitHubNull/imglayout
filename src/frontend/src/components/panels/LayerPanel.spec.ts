@@ -26,11 +26,12 @@ function entry(assetId: string): AssetEntry {
   return { assetId, path: `/photos/${assetId}.jpg`, thumbPath: `/thumbs/${assetId}.jpg`, widthPx: 100, heightPx: 100 }
 }
 
-function mountPanel(pinia: Pinia) {
+function mountPanel(pinia: Pinia, errorHandler?: (err: unknown) => void) {
   return mount(LayerPanel, {
     global: {
       plugins: [[PrimeVue, { theme: { preset: Aura } }], pinia],
       components: { Button, IconField, InputIcon, InputText, SelectButton, Slider, ToggleButton },
+      config: errorHandler ? { errorHandler } : {},
     },
   })
 }
@@ -224,5 +225,21 @@ describe('LayerPanel（PS 式图层面板）', () => {
     // 同名兜底：c（序号 3）在 a（序号 1）前
     const indexes = wrapper.findAll('.layer-index').map((el) => el.text())
     expect(indexes).toEqual(['3', '1'])
+  })
+
+  it('点击当前已选排序项不会清空排序，图层行保持渲染', async () => {
+    const errors: unknown[] = []
+    const wrapper = mountPanel(pinia, (err) => errors.push(err))
+    const options = wrapper.findAll('.sort-bar button.p-togglebutton')
+    expect(options).toHaveLength(4)
+    expect(options[0].attributes('aria-pressed')).toBe('true')
+
+    // SelectButton 默认 allowEmpty=true，真实点击已选中项会写 null；此路径无法用 $emit 覆盖
+    await options[0].trigger('click')
+    await nextTick()
+
+    expect(errors).toEqual([])
+    expect(wrapper.findAll('.layer-row')).toHaveLength(2)
+    expect(wrapper.findAll('.sort-bar button.p-togglebutton')[0].attributes('aria-pressed')).toBe('true')
   })
 })

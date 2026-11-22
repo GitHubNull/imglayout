@@ -43,6 +43,8 @@ const orderedLayers = computed(() => {
       return [...base].sort(byNameAsc)
     case 'name-desc':
       return [...base].sort((a, b) => byNameAsc(b, a))
+    default:
+      return base
   }
 })
 
@@ -189,6 +191,7 @@ const selectedSet = computed(() => new Set(project.selectedIds))
         :options="SORT_OPTIONS"
         option-label="label"
         option-value="value"
+        :allow-empty="false"
         size="small"
         class="sort-bar"
         title="图层排序"
