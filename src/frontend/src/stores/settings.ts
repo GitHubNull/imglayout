@@ -11,6 +11,7 @@ export interface SettingsState {
   edgeSnap: boolean
   rulerVisible: boolean
   guidesVisible: boolean
+  layerIndexVisible: boolean
 }
 
 const DEFAULTS: SettingsState = {
@@ -21,6 +22,7 @@ const DEFAULTS: SettingsState = {
   edgeSnap: true,
   rulerVisible: true,
   guidesVisible: true,
+  layerIndexVisible: true,
 }
 
 export const GRID_STEP_OPTIONS = [1, 2, 5, 10]

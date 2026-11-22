@@ -7,9 +7,17 @@
 ## [Unreleased]
 
 ### Added
+- 图层面板：新增图层序号列（行首显示，顶部图层序号最大），工具行 `#` 按钮可隐藏/恢复（默认显示，设置存 localStorage 自动持久化）；排序组支持序号升/降、文件名升/降四种视图排序（默认按序号，排序只改视图不改叠放次序，与搜索过滤可叠加）；非默认排序或过滤激活时自动禁用拖拽排序
+- 软件内帮助：顶栏新增「使用教程」（问号）与「关于」（i 图标）入口；教程弹窗由简入繁分三章（快速开始/图层与排版/导出与项目包），数据与 `doc/user/` 教程文档一一对应；关于对话框展示版本号（构建期经 `virtual:app-info` 从根 package.json 注入，单一来源）、作者 GitHubNull、MIT 协议全文与内嵌 CHANGELOG 更新历史
+- 仓库文档：新增根 README（简介/安装/构建/文档索引）、AGENTS.md（AI 代理工作指引）、LICENSE（MIT）、LEGAL.md（法律免责声明）；`doc/` 下新增 `user/`、`developer/`、`ai-agent/` 三个语义化目录，各含由简入繁的三级中文教程，并新增 doc/README.md 索引
 - 快捷键系统：统一命令注册表（项目/编辑/选择/视图四组），撤销/重做/保存/另存为/打开/复制/删除/组合/取消选择/方向键微调/视图开关全部可配置键位；设置对话框支持点击录制改键（Esc 取消、⌫ 清除）、冲突高亮提示、恢复默认；顶栏按钮 tooltip 实时显示当前绑定；键位存 localStorage（`imglayout.shortcuts.v1`），新增命令自动补默认绑定
 - `.imglayout` 单文件项目包（推荐保存格式）：zip 内含 `layout.yaml`（布局配置，YAML）+ `assets/` 嵌入原图，类似 PSD 可移动可分享，解决旧格式只存绝对路径引用、换电脑丢图的问题；保存/另存为分离（Ctrl+S 记住当前路径），原图缺失时弹清单可跳过保存，缺图图层在图层面板标记「缺失」
 - GitHub Actions 发布 workflow（`.github/workflows/release.yml`）：语义化版本 tag 触发（支持 `-beta.x`/`-test.x` 预发布，自动标记 Prerelease），Linux（deb/appimage）+ Windows（nsis）打包并发布 GitHub Release，tag 与四处工程版本号一致性校验；**尚未经真实运行验证，待 Actions 额度恢复后先用 `v*-test.1` 验证**
+
+### Fixed
+- 修复背景色/边框色 ColorPicker 保存值缺 `#` 前缀（PrimeVue hex 格式不带 #）导致导出背景恒为白色、预览背景/边框色不生效；写文档时统一收敛为 `#RRGGBB`，Rust `parse_hex_color` 同时兼容裸 hex 以覆盖历史项目文件
+- 修复关于对话框把 CHANGELOG 原始 Markdown 当纯文本输出：改为极简安全渲染（标题/列表/加粗/链接，先转义 HTML，无注入面）
+- 修复图层面板排序组与 `#` 序号开关按钮尺寸不协调（统一 26px 高、11px 字号）
 
 ### Changed
 - 方向键微调（Shift+方向键，自由布局 1mm）合并撤销步：连续微调只记一次历史

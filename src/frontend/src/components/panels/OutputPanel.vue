@@ -2,6 +2,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { computed, onMounted, ref } from 'vue'
 import { useProjectStore } from '../../stores/project'
+import { normalizeHexColor } from '../../lib/hexcolor'
 import { mmToPx, outputPx, type Preset } from '../../types/layout'
 
 const project = useProjectStore()
@@ -106,7 +107,7 @@ function customSize() {
       <ColorPicker
         :model-value="canvas.background"
         class="w-full"
-        @update:model-value="(v) => project.updateCanvas({ background: v ?? '#FFFFFF' })"
+        @update:model-value="(v) => project.updateCanvas({ background: normalizeHexColor(v, '#FFFFFF') })"
       />
     </label>
     <div class="px-info">

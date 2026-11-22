@@ -31,4 +31,13 @@ describe('settings store 主题字段', () => {
     setActivePinia(createPinia())
     expect(useSettingsStore().theme).toBe('light')
   })
+
+  it('layerIndexVisible 默认 true，旧存储无该键时合并补默认 true', () => {
+    expect(useSettingsStore().layerIndexVisible).toBe(true)
+    localStorage.setItem('imglayout.settings.v1', JSON.stringify({ theme: 'light' }))
+    setActivePinia(createPinia())
+    const store = useSettingsStore()
+    expect(store.theme).toBe('light')
+    expect(store.layerIndexVisible).toBe(true)
+  })
 })

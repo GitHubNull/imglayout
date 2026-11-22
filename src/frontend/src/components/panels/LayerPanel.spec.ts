@@ -5,13 +5,16 @@ import Button from 'primevue/button'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import InputText from 'primevue/inputtext'
+import SelectButton from 'primevue/selectbutton'
 import Slider from 'primevue/slider'
+import ToggleButton from 'primevue/togglebutton'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { newItem, type AssetEntry } from '../../types/layout'
 import { useAssetsStore } from '../../stores/assets'
 import { useProjectStore } from '../../stores/project'
+import { useSettingsStore } from '../../stores/settings'
 import LayerPanel from './LayerPanel.vue'
 
 // jsdom 无 Tauri 运行时
@@ -27,7 +30,7 @@ function mountPanel(pinia: Pinia) {
   return mount(LayerPanel, {
     global: {
       plugins: [[PrimeVue, { theme: { preset: Aura } }], pinia],
-      components: { Button, IconField, InputIcon, InputText, Slider },
+      components: { Button, IconField, InputIcon, InputText, SelectButton, Slider, ToggleButton },
     },
   })
 }
@@ -148,5 +151,78 @@ describe('LayerPanel（PS 式图层面板）', () => {
     expect(project.undoStack.length).toBe(stackBefore + 1)
     project.undo()
     expect(project.doc.items[0].opacity).toBe(before)
+  })
+
+  it('默认态显示序号列：顶部图层序号最大，行序等于 items 倒序', async () => {
+    assets.entries.set('asset-c', entry('asset-c'))
+    project.doc.items.push({ ...newItem('c', 'asset-c') })
+    const wrapper = mountPanel(pinia)
+    const indexes = wrapper.findAll('.layer-index').map((el) => el.text())
+    expect(indexes).toEqual(['3', '2', '1'])
+    expect(wrapper.findAll('.layer-row .name').map((el) => el.text())).toEqual([
+      'asset-c.jpg',
+      'asset-b.jpg',
+      '背景',
+    ])
+  })
+
+  it('关闭 layerIndexVisible 后行内无序号列', async () => {
+    const wrapper = mountPanel(pinia)
+    expect(wrapper.findAll('.layer-index')).toHaveLength(2)
+    useSettingsStore(pinia).layerIndexVisible = false
+    await nextTick()
+    expect(wrapper.findAll('.layer-index')).toHaveLength(0)
+  })
+
+  it('按文件名排序：升序/降序正确，同名按序号↓兜底，且不改 items 堆叠次序', async () => {
+    assets.entries.set('asset-c', entry('asset-c'))
+    assets.entries.set('asset-d', entry('asset-d'))
+    project.doc.items.push({ ...newItem('c', 'asset-c'), name: '背景' })
+    project.doc.items.push({ ...newItem('d', 'asset-d') })
+    const wrapper = mountPanel(pinia)
+    const sort = wrapper.findComponent(SelectButton)
+    const idsBefore = project.doc.items.map((i) => i.id)
+
+    await sort.vm.$emit('update:modelValue', 'name-asc')
+    // zh-Hans-CN 排序：汉字按拼音在拉丁字母之前；同名「背景」按序号↓兜底（c 序号大在前）
+    expect(wrapper.findAll('.layer-row .name').map((el) => el.text())).toEqual([
+      '背景',
+      '背景',
+      'asset-b.jpg',
+      'asset-d.jpg',
+    ])
+
+    await sort.vm.$emit('update:modelValue', 'name-desc')
+    expect(wrapper.findAll('.layer-row .name').map((el) => el.text())).toEqual([
+      'asset-d.jpg',
+      'asset-b.jpg',
+      '背景',
+      '背景',
+    ])
+
+    // 纯视图排序：items 数组本身不动
+    expect(project.doc.items.map((i) => i.id)).toEqual(idsBefore)
+  })
+
+  it('非默认排序下禁止拖拽，切回序号↓恢复', async () => {
+    const wrapper = mountPanel(pinia)
+    expect(wrapper.find('.layer-row').attributes('draggable')).toBe('true')
+    await wrapper.findComponent(SelectButton).vm.$emit('update:modelValue', 'name-asc')
+    expect(wrapper.find('.layer-row').attributes('draggable')).toBe('false')
+    await wrapper.findComponent(SelectButton).vm.$emit('update:modelValue', 'index-desc')
+    expect(wrapper.find('.layer-row').attributes('draggable')).toBe('true')
+  })
+
+  it('排序与搜索叠加：过滤结果仍按当前排序呈现', async () => {
+    assets.entries.set('asset-c', entry('asset-c'))
+    project.doc.items.push({ ...newItem('c', 'asset-c'), name: '背景' })
+    const wrapper = mountPanel(pinia)
+    await wrapper.findComponent(SelectButton).vm.$emit('update:modelValue', 'name-asc')
+    await wrapper.find('.layer-search input').setValue('背景')
+    const names = wrapper.findAll('.layer-row .name').map((el) => el.text())
+    expect(names).toEqual(['背景', '背景'])
+    // 同名兜底：c（序号 3）在 a（序号 1）前
+    const indexes = wrapper.findAll('.layer-index').map((el) => el.text())
+    expect(indexes).toEqual(['3', '1'])
   })
 })

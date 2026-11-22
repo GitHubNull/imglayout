@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useProjectStore } from '../../stores/project'
+import { normalizeHexColor } from '../../lib/hexcolor'
 import type { PhotoItem } from '../../types/layout'
 
 const project = useProjectStore()
@@ -104,7 +105,7 @@ function endAdjust() {
     </label>
     <label v-if="item.style.borderWidthMm > 0" class="field">
       <span>边框颜色</span>
-      <ColorPicker :model-value="item.style.borderColor" class="w-full" @update:model-value="(v) => patch({ style: { ...item!.style, borderColor: v ?? '#000000' } }, true)" />
+      <ColorPicker :model-value="item.style.borderColor" class="w-full" @update:model-value="(v) => patch({ style: { ...item!.style, borderColor: normalizeHexColor(v, '#000000') } }, true)" />
     </label>
   </div>
   <div v-else class="empty">在画布上点击一张照片进行编辑</div>

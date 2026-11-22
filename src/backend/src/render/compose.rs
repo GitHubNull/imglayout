@@ -4,9 +4,9 @@ use image::{imageops, Rgb, RgbImage, Rgba, RgbaImage};
 
 use crate::model::FillMode;
 
-/// 解析 `#RGB` / `#RRGGBB`；非法值返回 None。
+/// 解析 `#RGB` / `#RRGGBB`（`#` 可省略，兼容历史项目里 ColorPicker 存的裸 hex）；非法值返回 None。
 pub fn parse_hex_color(hex: &str) -> Option<Rgb<u8>> {
-    let s = hex.strip_prefix('#')?;
+    let s = hex.strip_prefix('#').unwrap_or(hex);
     let expanded;
     let s = match s.len() {
         3 => {
@@ -172,7 +172,8 @@ mod tests {
     fn parse_hex_variants() {
         assert_eq!(parse_hex_color("#FF0000"), Some(Rgb([255, 0, 0])));
         assert_eq!(parse_hex_color("#f00"), Some(Rgb([255, 0, 0])));
-        assert_eq!(parse_hex_color("FF0000"), None);
+        // 裸 hex 自 ColorPicker 兼容修复起合法（历史项目文件可能存了无 # 的值）
+        assert_eq!(parse_hex_color("FF0000"), Some(Rgb([255, 0, 0])));
         assert_eq!(parse_hex_color("#GG0000"), None);
     }
 

@@ -20,6 +20,8 @@ import { useGlobalShortcuts } from '../composables/useGlobalShortcuts'
 import { buildCommands } from '../lib/shortcuts/commands'
 import { displayChord } from '../lib/shortcuts/chords'
 import ShortcutsDialog from '../components/settings/ShortcutsDialog.vue'
+import AboutDialog from '../components/help/AboutDialog.vue'
+import TutorialDialog from '../components/help/TutorialDialog.vue'
 import type { AssetEntry } from '../types/layout'
 
 const project = useProjectStore()
@@ -52,6 +54,8 @@ const darkMode = computed({
   },
 })
 const exportDialog = ref(false)
+const tutorialVisible = ref(false)
+const aboutVisible = ref(false)
 const exporting = ref(false)
 const exportDone = ref(0)
 const exportTotal = ref(0)
@@ -197,6 +201,8 @@ onBeforeUnmount(() => {
       <span class="zoom">暗色</span>
       <ToggleSwitch v-model="darkMode" title="切换亮/暗主题" />
       <Button icon="pi pi-cog" text title="快捷键设置" @click="shortcuts.dialogOpen = true" />
+      <Button icon="pi pi-question-circle" text title="使用教程" @click="tutorialVisible = true" />
+      <Button icon="pi pi-info-circle" text title="关于 imgLayout" @click="aboutVisible = true" />
       <Button label="导出…" icon="pi pi-download" @click="startExport" />
     </header>
 
@@ -279,6 +285,8 @@ onBeforeUnmount(() => {
       </div>
     </Dialog>
     <ShortcutsDialog v-model="shortcuts.dialogOpen" />
+    <TutorialDialog v-model="tutorialVisible" />
+    <AboutDialog v-model="aboutVisible" />
   </div>
 </template>
 

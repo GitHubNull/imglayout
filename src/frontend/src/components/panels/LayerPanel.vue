@@ -2,20 +2,56 @@
 import { computed, nextTick, ref, type ComponentPublicInstance } from 'vue'
 import { useAssetsStore } from '../../stores/assets'
 import { useProjectStore } from '../../stores/project'
+import { useSettingsStore } from '../../stores/settings'
 import type { PhotoItem } from '../../types/layout'
 
 const project = useProjectStore()
 const assets = useAssetsStore()
+const settings = useSettingsStore()
 
 // PS 图层语义：列表顶部 = 最顶层 = items 数组末尾
-const allLayers = computed(() => [...project.doc.items].reverse())
+// 序号 = items 数组下标 + 1：数组末尾是最顶层，顶部图层序号最大；只随堆叠顺序派生，不随视图排序变化
+const indexOfId = computed(() => {
+  const m = new Map<string, number>()
+  project.doc.items.forEach((it, i) => m.set(it.id, i + 1))
+  return m
+})
+
+// ---- 视图排序（默认 index-desc = 现有顺序；不改变 items 堆叠次序）----
+type SortMode = 'index-desc' | 'index-asc' | 'name-asc' | 'name-desc'
+const sortMode = ref<SortMode>('index-desc')
+const sortActive = computed(() => sortMode.value !== 'index-desc')
+
+const SORT_OPTIONS = [
+  { label: '序号↓', value: 'index-desc' },
+  { label: '序号↑', value: 'index-asc' },
+  { label: '文件↑', value: 'name-asc' },
+  { label: '文件↓', value: 'name-desc' },
+]
+
+const orderedLayers = computed(() => {
+  const base = [...project.doc.items].reverse()
+  const byNameAsc = (a: PhotoItem, b: PhotoItem) =>
+    nameOf(a).localeCompare(nameOf(b), 'zh-Hans-CN', { numeric: true }) ||
+    (indexOfId.value.get(b.id)! - indexOfId.value.get(a.id)!)
+  switch (sortMode.value) {
+    case 'index-desc':
+      return base
+    case 'index-asc':
+      return [...base].reverse()
+    case 'name-asc':
+      return [...base].sort(byNameAsc)
+    case 'name-desc':
+      return [...base].sort((a, b) => byNameAsc(b, a))
+  }
+})
 
 // ---- 搜索过滤 ----
 const query = ref('')
 const layers = computed(() => {
   const q = query.value.trim().toLowerCase()
-  if (!q) return allLayers.value
-  return allLayers.value.filter((item) => nameOf(item).toLowerCase().includes(q))
+  if (!q) return orderedLayers.value
+  return orderedLayers.value.filter((item) => nameOf(item).toLowerCase().includes(q))
 })
 const filterActive = computed(() => query.value.trim().length > 0)
 
@@ -80,20 +116,21 @@ function cancelRename() {
   editingId.value = null
 }
 
-// ---- 拖拽排序（HTML5 DnD）；搜索过滤态下禁用 ----
+// ---- 拖拽排序（HTML5 DnD）；搜索过滤态或非默认排序态下禁用 ----
+const reorderDisabled = computed(() => filterActive.value || sortActive.value)
 const dragId = ref<string | null>(null)
 /** 插入到该显示行之前；等于 layers.length 表示插到最底 */
 const dropPos = ref<number | null>(null)
 
 function onDragStart(item: PhotoItem, e: DragEvent) {
-  if (filterActive.value) return
+  if (reorderDisabled.value) return
   dragId.value = item.id
   e.dataTransfer?.setData('text/plain', item.id)
   if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
 }
 
 function onDragOver(idx: number, e: DragEvent) {
-  if (!dragId.value || filterActive.value) return
+  if (!dragId.value || reorderDisabled.value) return
   e.preventDefault()
   const row = (e.currentTarget as HTMLElement).getBoundingClientRect()
   const before = e.clientY < row.top + row.height / 2
@@ -102,7 +139,7 @@ function onDragOver(idx: number, e: DragEvent) {
 }
 
 function onTailDragOver(e: DragEvent) {
-  if (!dragId.value || filterActive.value) return
+  if (!dragId.value || reorderDisabled.value) return
   e.preventDefault()
   dropPos.value = layers.value.length
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
@@ -110,7 +147,7 @@ function onTailDragOver(e: DragEvent) {
 
 function onDrop(e: DragEvent) {
   e.preventDefault()
-  if (filterActive.value) return
+  if (reorderDisabled.value) return
   const id = dragId.value
   const pos = dropPos.value
   dragId.value = null
@@ -146,6 +183,26 @@ const selectedSet = computed(() => new Set(project.selectedIds))
         <InputText v-model="query" placeholder="搜索图层" size="small" class="w-full" />
       </IconField>
     </div>
+    <div class="layer-tools">
+      <SelectButton
+        v-model="sortMode"
+        :options="SORT_OPTIONS"
+        option-label="label"
+        option-value="value"
+        size="small"
+        class="sort-bar"
+        title="图层排序"
+      />
+      <ToggleButton
+        v-model="settings.layerIndexVisible"
+        on-icon="pi pi-hashtag"
+        off-icon="pi pi-hashtag"
+        on-label=""
+        off-label=""
+        class="index-toggle"
+        title="显示/隐藏图层序号"
+      />
+    </div>
     <div v-if="layers.length" class="layer-list">
       <div
         v-for="(item, idx) in layers"
@@ -157,13 +214,14 @@ const selectedSet = computed(() => new Set(project.selectedIds))
           hidden: !item.visible,
           'drop-before': isDropBefore(idx),
         }"
-        :draggable="!filterActive"
+        :draggable="!reorderDisabled"
         @click="onRowClick(item, $event)"
         @dragstart="onDragStart(item, $event)"
         @dragover="onDragOver(idx, $event)"
         @drop="onDrop"
         @dragend="dragId = null; dropPos = null"
       >
+        <span v-if="settings.layerIndexVisible" class="layer-index" :title="`图层序号 ${indexOfId.get(item.id)}`">{{ indexOfId.get(item.id) }}</span>
         <Button
           :icon="item.visible ? 'pi pi-eye' : 'pi pi-eye-slash'"
           class="eye"
@@ -231,6 +289,38 @@ const selectedSet = computed(() => new Set(project.selectedIds))
 .layer-search {
   padding: 8px 8px 4px;
 }
+.layer-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 6px;
+}
+.sort-bar {
+  flex: 1;
+  min-width: 0;
+}
+.sort-bar :deep(.p-togglebutton) {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 2px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.sort-bar :deep(.p-togglebutton .p-togglebutton-content) {
+  padding: 0;
+}
+/* 与排序组（small）同高同字号的紧凑方块开关 */
+.index-toggle {
+  flex-shrink: 0;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
+  font-size: 11px;
+}
+.index-toggle :deep(.p-togglebutton-content) {
+  padding: 0;
+}
 .layer-list {
   flex: 1;
   min-height: 180px;
@@ -292,6 +382,14 @@ const selectedSet = computed(() => new Set(project.selectedIds))
   border-radius: 4px;
   background: var(--p-red-500);
   color: #fff;
+}
+.layer-index {
+  flex-shrink: 0;
+  width: 22px;
+  font-size: 11px;
+  text-align: right;
+  color: var(--p-text-muted-color);
+  font-variant-numeric: tabular-nums;
 }
 .name {
   flex: 1;

@@ -241,3 +241,19 @@ describe('project store 对齐/分布', () => {
     expect(store.doc.items[0].rect.xMm).toBe(0)
   })
 })
+
+describe('project store 画布更新', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('updateCanvas 将裸 hex 背景色收敛为 #RRGGBB（ColorPicker 兼容）', () => {
+    const store = useProjectStore()
+    store.updateCanvas({ background: 'ff0000' })
+    expect(store.doc.canvas.background).toBe('#FF0000')
+    store.updateCanvas({ background: '#00ff88' })
+    expect(store.doc.canvas.background).toBe('#00FF88')
+    store.updateCanvas({ background: '垃圾值' })
+    expect(store.doc.canvas.background).toBe('#FFFFFF')
+  })
+})

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { normalizeHexColor } from '../lib/hexcolor'
 import {
   defaultGrid,
   defaultMasonry,
@@ -158,6 +159,10 @@ export const useProjectStore = defineStore('project', {
     },
     updateCanvas(patch: Partial<CanvasSpec>, recordHistory = true) {
       if (recordHistory) this.snapshot()
+      // 文档契约要求 #RRGGBB；ColorPicker 可能给出裸 hex，写文档前收敛
+      if (patch.background !== undefined) {
+        patch = { ...patch, background: normalizeHexColor(patch.background, '#FFFFFF') }
+      }
       Object.assign(this.doc.canvas, patch)
     },
     updateGrid(patch: Partial<GridConfig>, recordHistory = true) {
